@@ -6,8 +6,27 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		F6D000132F8B700000D70577 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F6BD54092F8B683D00D70577 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F6BD54102F8B683D00D70577;
+			remoteInfo = AllerScan;
+		};
+		F6D000142F8B700000D70577 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F6BD54092F8B683D00D70577 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F6BD54102F8B683D00D70577;
+			remoteInfo = AllerScan;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		F6BD54112F8B683D00D70577 /* AllerScan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AllerScan.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6D000012F8B700000D70577 /* AllerScanTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AllerScanTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6D000022F8B700000D70577 /* AllerScanUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AllerScanUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +35,34 @@
 			path = AllerScan;
 			sourceTree = "<group>";
 		};
+		F6D000032F8B700000D70577 /* AllerScanTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AllerScanTests;
+			sourceTree = "<group>";
+		};
+		F6D000042F8B700000D70577 /* AllerScanUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AllerScanUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		F6BD540E2F8B683D00D70577 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6D000082F8B700000D70577 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6D0000D2F8B700000D70577 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +76,8 @@
 			isa = PBXGroup;
 			children = (
 				F6BD54132F8B683D00D70577 /* AllerScan */,
+				F6D000032F8B700000D70577 /* AllerScanTests */,
+				F6D000042F8B700000D70577 /* AllerScanUITests */,
 				F6BD54122F8B683D00D70577 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +86,8 @@
 			isa = PBXGroup;
 			children = (
 				F6BD54112F8B683D00D70577 /* AllerScan.app */,
+				F6D000012F8B700000D70577 /* AllerScanTests.xctest */,
+				F6D000022F8B700000D70577 /* AllerScanUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +117,52 @@
 			productReference = F6BD54112F8B683D00D70577 /* AllerScan.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F6D000062F8B700000D70577 /* AllerScanTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F6D000172F8B700000D70577 /* Build configuration list for PBXNativeTarget "AllerScanTests" */;
+			buildPhases = (
+				F6D000072F8B700000D70577 /* Sources */,
+				F6D000082F8B700000D70577 /* Frameworks */,
+				F6D000092F8B700000D70577 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F6D000152F8B700000D70577 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				F6D000032F8B700000D70577 /* AllerScanTests */,
+			);
+			name = AllerScanTests;
+			packageProductDependencies = (
+			);
+			productName = AllerScanTests;
+			productReference = F6D000012F8B700000D70577 /* AllerScanTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		F6D0000B2F8B700000D70577 /* AllerScanUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F6D0001A2F8B700000D70577 /* Build configuration list for PBXNativeTarget "AllerScanUITests" */;
+			buildPhases = (
+				F6D0000C2F8B700000D70577 /* Sources */,
+				F6D0000D2F8B700000D70577 /* Frameworks */,
+				F6D0000E2F8B700000D70577 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F6D000162F8B700000D70577 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				F6D000042F8B700000D70577 /* AllerScanUITests */,
+			);
+			name = AllerScanUITests;
+			packageProductDependencies = (
+			);
+			productName = AllerScanUITests;
+			productReference = F6D000022F8B700000D70577 /* AllerScanUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +175,14 @@
 				TargetAttributes = {
 					F6BD54102F8B683D00D70577 = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					F6D000062F8B700000D70577 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = F6BD54102F8B683D00D70577;
+					};
+					F6D0000B2F8B700000D70577 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = F6BD54102F8B683D00D70577;
 					};
 				};
 			};
@@ -100,12 +201,28 @@
 			projectRoot = "";
 			targets = (
 				F6BD54102F8B683D00D70577 /* AllerScan */,
+				F6D000062F8B700000D70577 /* AllerScanTests */,
+				F6D0000B2F8B700000D70577 /* AllerScanUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		F6BD540F2F8B683D00D70577 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6D000092F8B700000D70577 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6D0000E2F8B700000D70577 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +239,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F6D000072F8B700000D70577 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6D0000C2F8B700000D70577 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F6D000152F8B700000D70577 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F6BD54102F8B683D00D70577 /* AllerScan */;
+			targetProxy = F6D000132F8B700000D70577 /* PBXContainerItemProxy */;
+		};
+		F6D000162F8B700000D70577 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F6BD54102F8B683D00D70577 /* AllerScan */;
+			targetProxy = F6D000142F8B700000D70577 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		F6BD541A2F8B683D00D70577 /* Debug */ = {
@@ -251,8 +395,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SMPKXAMPVC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "AllerScan uses the camera to scan ingredient labels.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "AllerScan uses Face ID or Touch ID to protect your allergy profile.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -282,8 +429,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SMPKXAMPVC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "AllerScan uses the camera to scan ingredient labels.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "AllerScan uses Face ID or Touch ID to protect your allergy profile.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -306,6 +456,88 @@
 			};
 			name = Release;
 		};
+		F6D000182F8B700000D70577 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = gimz.AllerScanTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AllerScan.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AllerScan";
+			};
+			name = Debug;
+		};
+		F6D000192F8B700000D70577 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = gimz.AllerScanTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AllerScan.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AllerScan";
+			};
+			name = Release;
+		};
+		F6D0001B2F8B700000D70577 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = gimz.AllerScanUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = AllerScan;
+			};
+			name = Debug;
+		};
+		F6D0001C2F8B700000D70577 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = gimz.AllerScanUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = AllerScan;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -323,6 +555,24 @@
 			buildConfigurations = (
 				F6BD541D2F8B683D00D70577 /* Debug */,
 				F6BD541E2F8B683D00D70577 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F6D000172F8B700000D70577 /* Build configuration list for PBXNativeTarget "AllerScanTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6D000182F8B700000D70577 /* Debug */,
+				F6D000192F8B700000D70577 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F6D0001A2F8B700000D70577 /* Build configuration list for PBXNativeTarget "AllerScanUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6D0001B2F8B700000D70577 /* Debug */,
+				F6D0001C2F8B700000D70577 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
