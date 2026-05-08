@@ -78,7 +78,9 @@ final class AppViewModel: ObservableObject {
             return
         }
 
-        let targetID = editingProfileID ?? store.activeProfile?.id ?? UUID()
+        // editingProfileID nil = creating new (fresh UUID)
+        // editingProfileID set = editing that specific profile
+        let targetID = editingProfileID ?? UUID()
         let existing = store.profiles.first { $0.id == targetID }
 
         let profile = UserProfile(

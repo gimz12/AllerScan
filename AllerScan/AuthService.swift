@@ -13,6 +13,7 @@ final class AuthService: ObservableObject {
     var isAuthenticated: Bool { currentUser != nil }
     var displayName: String { currentUser?.displayName ?? "" }
     var email: String { currentUser?.email ?? "" }
+    var uid: String? { currentUser?.uid }
 
     init() {
         authStateListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in

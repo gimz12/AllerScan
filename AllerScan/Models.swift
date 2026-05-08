@@ -127,6 +127,18 @@ struct ScanResult: Codable, Sendable {
     let scannedAt: Date
 }
 
+struct CustomAllergenRecord: Identifiable, Codable, Equatable, Sendable {
+    let id: String
+    var name: String
+    var aliases: [String]
+    var profileID: UUID
+    var createdAt: Date
+
+    var asAllergen: Allergen {
+        Allergen(id: id, name: name, aliases: aliases, hiddenAliases: [], negativeContexts: [])
+    }
+}
+
 struct ScanRecord: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     let rawText: String
@@ -135,6 +147,7 @@ struct ScanRecord: Identifiable, Codable, Equatable, Sendable {
     let matches: [DetectedAllergen]
     let riskLevel: RiskLevel
     let createdAt: Date
+    var profileID: UUID?
 
     init(
         id: UUID = UUID(),
@@ -143,7 +156,8 @@ struct ScanRecord: Identifiable, Codable, Equatable, Sendable {
         foundIngredientsText: String,
         matches: [DetectedAllergen],
         riskLevel: RiskLevel,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        profileID: UUID? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -152,6 +166,13 @@ struct ScanRecord: Identifiable, Codable, Equatable, Sendable {
         self.matches = matches
         self.riskLevel = riskLevel
         self.createdAt = createdAt
+        self.profileID = profileID
+    }
+
+    func with(profileID: UUID?) -> ScanRecord {
+        var copy = self
+        copy.profileID = profileID
+        return copy
     }
 
     init(result: ScanResult) {

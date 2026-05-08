@@ -8,13 +8,20 @@ struct AllerScanApp: App {
     @StateObject private var persistenceStore: PersistenceStore
     @StateObject private var appModel: AppViewModel
     @StateObject private var authService: AuthService
+    @StateObject private var syncService: SyncService
 
     init() {
         FirebaseApp.configure()
         let store = PersistenceStore()
+        let sync = SyncService()
+        store.syncService = sync
+        sync.applyRemoteSnapshot = { [weak store] snapshot in
+            try store?.applyRemoteSnapshot(snapshot)
+        }
         _persistenceStore = StateObject(wrappedValue: store)
         _appModel = StateObject(wrappedValue: AppViewModel(store: store))
         _authService = StateObject(wrappedValue: AuthService())
+        _syncService = StateObject(wrappedValue: sync)
     }
 
     var body: some Scene {
@@ -23,10 +30,45 @@ struct AllerScanApp: App {
                 .environmentObject(persistenceStore)
                 .environmentObject(appModel)
                 .environmentObject(authService)
+                .environmentObject(syncService)
                 .environmentObject(EmergencyDeepLink.shared)
                 .task {
                     await appModel.bootstrap()
                 }
+                .task(id: authStateID) {
+                    await handleAuthChange()
+                }
+        }
+    }
+
+    private var authStateID: String {
+        "\(authService.uid ?? "anon")_\(authService.isEmailVerified)"
+    }
+
+    private func handleAuthChange() async {
+        let lastSyncedKey = "AllerScan.lastSyncedUID"
+        syncService.updateAuthState(isAuthenticated: authService.uid != nil)
+
+        if let uid = authService.uid, authService.isEmailVerified {
+            let previous = UserDefaults.standard.string(forKey: lastSyncedKey)
+            if previous != uid {
+                // First sign-in (or different account) → wipe local data, then pull from Firestore.
+                persistenceStore.clearSyncableLocalData()
+                do {
+                    let snapshot = try await syncService.pullAll()
+                    try persistenceStore.applyRemoteSnapshot(snapshot)
+                    syncService.markSyncedNow()
+                } catch {
+                    print("[Sync] initial pull failed: \(error.localizedDescription)")
+                }
+                UserDefaults.standard.set(uid, forKey: lastSyncedKey)
+            } else {
+                syncService.markSyncedNow()
+            }
+        } else if authService.uid == nil {
+            // Signed out → clear local data so next user doesn't see previous data.
+            persistenceStore.clearSyncableLocalData()
+            UserDefaults.standard.removeObject(forKey: lastSyncedKey)
         }
     }
 }

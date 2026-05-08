@@ -13,6 +13,10 @@ final class PersistenceStore: ObservableObject {
 
     private let activeProfileKey = "AllerScan.activeProfileID"
 
+    /// Set by AllerScanApp after init. PersistenceStore calls into this on every mutation
+    /// so changes propagate to Firestore. Optional so the store can run without sync (tests, offline).
+    var syncService: SyncService?
+
     var activeProfile: UserProfile? {
         guard let id = activeProfileID else { return profiles.first }
         return profiles.first { $0.id == id } ?? profiles.first
@@ -91,16 +95,22 @@ final class PersistenceStore: ObservableObject {
         entity.createdAt = profile.createdAt
         try context.save()
         refresh()
+        syncService?.upload(profile: profile)
     }
 
     func deleteProfile(id: UUID) throws {
         let context = container.viewContext
+
+        // Cascade delete scans + custom allergens for this profile.
+        cascadeDeleteEntities(entityName: "ScanRecordEntity", profileID: id, in: context)
+        cascadeDeleteEntities(entityName: "CustomAllergenEntity", profileID: id, in: context)
+
         let request = UserProfileEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         if let entity = try? context.fetch(request).first {
             context.delete(entity)
-            try context.save()
         }
+        try context.save()
 
         if activeProfileID == id {
             activeProfileID = nil
@@ -108,12 +118,87 @@ final class PersistenceStore: ObservableObject {
         }
 
         refresh()
+        syncService?.deleteProfile(id: id)
     }
 
     func setActiveProfile(id: UUID) {
         guard profiles.contains(where: { $0.id == id }) else { return }
         activeProfileID = id
         UserDefaults.standard.set(id.uuidString, forKey: activeProfileKey)
+        // Re-fetch scan history + custom allergens for the new profile.
+        scanHistory = fetchHistory()
+        customAllergens = fetchCustomAllergens()
+    }
+
+    private func cascadeDeleteEntities(entityName: String, profileID: UUID, in context: NSManagedObjectContext) {
+        let request = NSFetchRequest<NSManagedObject>(entityName: entityName)
+        request.predicate = NSPredicate(format: "profileID == %@", profileID as CVarArg)
+        if let entities = try? context.fetch(request) {
+            for entity in entities { context.delete(entity) }
+        }
+    }
+
+    /// Replace local profile/scan/custom-allergen data with a remote snapshot from Firestore.
+    /// Used after sign-in to restore the user's data on a new device.
+    func applyRemoteSnapshot(_ snapshot: SyncService.RemoteSnapshot) throws {
+        let context = container.viewContext
+
+        wipeAllSyncableEntities(in: context)
+
+        for profile in snapshot.profiles {
+            let entity = UserProfileEntity(context: context)
+            entity.id = profile.id
+            entity.name = profile.name
+            entity.trackedAllergenIDs = encode(profile.trackedAllergenIDs)
+            entity.createdAt = profile.createdAt
+        }
+
+        for (profileID, scans) in snapshot.scansByProfile {
+            for scan in scans {
+                let entity = ScanRecordEntity(context: context)
+                entity.id = scan.id
+                entity.rawText = scan.rawText
+                entity.normalizedText = scan.normalizedText
+                entity.foundIngredientsText = scan.foundIngredientsText
+                entity.matches = encode(scan.matches)
+                entity.riskLevel = scan.riskLevel.rawValue
+                entity.createdAt = scan.createdAt
+                entity.profileID = profileID
+            }
+        }
+
+        for (profileID, customs) in snapshot.customAllergensByProfile {
+            for custom in customs {
+                let entity = CustomAllergenEntity(context: context)
+                entity.id = custom.id
+                entity.name = custom.name
+                entity.aliases = encode(custom.aliases)
+                entity.createdAt = custom.createdAt
+                entity.profileID = profileID
+            }
+        }
+
+        try context.save()
+        refresh()
+    }
+
+    /// Wipe all syncable local data on sign-out so the next user doesn't see the previous one's data.
+    func clearSyncableLocalData() {
+        let context = container.viewContext
+        wipeAllSyncableEntities(in: context)
+        try? context.save()
+        UserDefaults.standard.removeObject(forKey: activeProfileKey)
+        activeProfileID = nil
+        refresh()
+    }
+
+    private func wipeAllSyncableEntities(in context: NSManagedObjectContext) {
+        for name in ["UserProfileEntity", "ScanRecordEntity", "CustomAllergenEntity"] {
+            let request = NSFetchRequest<NSManagedObject>(entityName: name)
+            if let entities = try? context.fetch(request) {
+                for entity in entities { context.delete(entity) }
+            }
+        }
     }
 
     private func loadActiveProfileID() -> UUID? {
@@ -124,19 +209,26 @@ final class PersistenceStore: ObservableObject {
     func saveScanRecord(_ record: ScanRecord) throws {
         let context = container.viewContext
         let entity = ScanRecordEntity(context: context)
-        entity.id = record.id
-        entity.rawText = record.rawText
-        entity.normalizedText = record.normalizedText
-        entity.foundIngredientsText = record.foundIngredientsText
-        entity.matches = encode(record.matches)
-        entity.riskLevel = record.riskLevel.rawValue
-        entity.createdAt = record.createdAt
+        let stamped = record.with(profileID: activeProfileID)
+        entity.id = stamped.id
+        entity.rawText = stamped.rawText
+        entity.normalizedText = stamped.normalizedText
+        entity.foundIngredientsText = stamped.foundIngredientsText
+        entity.matches = encode(stamped.matches)
+        entity.riskLevel = stamped.riskLevel.rawValue
+        entity.createdAt = stamped.createdAt
+        entity.profileID = stamped.profileID
         try context.save()
         refresh()
+        if let profileID = stamped.profileID {
+            syncService?.upload(scan: stamped, profileID: profileID)
+        }
     }
 
     func deleteScanRecords(at offsets: IndexSet) throws {
         let context = container.viewContext
+        var deletedIDs: [UUID] = []
+        let pid = activeProfileID
         for index in offsets {
             let record = scanHistory[index]
             let request = ScanRecordEntity.fetchRequest()
@@ -144,10 +236,14 @@ final class PersistenceStore: ObservableObject {
             request.predicate = NSPredicate(format: "id == %@", record.id as CVarArg)
             if let entity = try context.fetch(request).first {
                 context.delete(entity)
+                deletedIDs.append(record.id)
             }
         }
         try context.save()
         refresh()
+        if let pid {
+            for id in deletedIDs { syncService?.deleteScan(id: id, profileID: pid) }
+        }
     }
 
     func saveCustomAllergen(_ allergen: Allergen) throws {
@@ -157,18 +253,26 @@ final class PersistenceStore: ObservableObject {
         entity.name = allergen.name
         entity.aliases = encode(allergen.aliases)
         entity.createdAt = Date.now
+        entity.profileID = activeProfileID
         try context.save()
         refresh()
+        if let pid = activeProfileID {
+            syncService?.upload(customAllergen: allergen, profileID: pid)
+        }
     }
 
     func deleteCustomAllergen(id: String) throws {
         let context = container.viewContext
         let request = CustomAllergenEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", id)
+        let pid = activeProfileID
         if let entity = try context.fetch(request).first {
             context.delete(entity)
             try context.save()
             refresh()
+            if let pid {
+                syncService?.deleteCustomAllergen(id: id, profileID: pid)
+            }
         }
     }
 
@@ -210,6 +314,9 @@ final class PersistenceStore: ObservableObject {
     private func fetchHistory() -> [ScanRecord] {
         let request = ScanRecordEntity.fetchRequest()
         request.sortDescriptors = [NSSortDescriptor(keyPath: \ScanRecordEntity.createdAt, ascending: false)]
+        if let active = activeProfileID {
+            request.predicate = NSPredicate(format: "profileID == %@", active as CVarArg)
+        }
         let entities = (try? container.viewContext.fetch(request)) ?? []
         return entities.compactMap { entity in
             guard let id = entity.id,
@@ -229,7 +336,8 @@ final class PersistenceStore: ObservableObject {
                 foundIngredientsText: entity.foundIngredientsText ?? rawText,
                 matches: decode([DetectedAllergen].self, from: entity.matches) ?? [],
                 riskLevel: riskLevel,
-                createdAt: createdAt
+                createdAt: createdAt,
+                profileID: entity.profileID
             )
         }
     }
@@ -237,6 +345,9 @@ final class PersistenceStore: ObservableObject {
     private func fetchCustomAllergens() -> [Allergen] {
         let request = CustomAllergenEntity.fetchRequest()
         request.sortDescriptors = [NSSortDescriptor(keyPath: \CustomAllergenEntity.createdAt, ascending: true)]
+        if let active = activeProfileID {
+            request.predicate = NSPredicate(format: "profileID == %@", active as CVarArg)
+        }
         let entities = (try? container.viewContext.fetch(request)) ?? []
         return entities.compactMap { entity in
             guard let id = entity.id, let name = entity.name else { return nil }
@@ -298,7 +409,8 @@ extension PersistenceStore {
             attribute("foundIngredientsText", type: .stringAttributeType, optional: true),
             attribute("matches", type: .binaryDataAttributeType, optional: true),
             attribute("riskLevel", type: .stringAttributeType),
-            attribute("createdAt", type: .dateAttributeType)
+            attribute("createdAt", type: .dateAttributeType),
+            attribute("profileID", type: .UUIDAttributeType, optional: true)
         ]
 
         let appSettings = NSEntityDescription()
@@ -321,7 +433,8 @@ extension PersistenceStore {
             attribute("id", type: .stringAttributeType),
             attribute("name", type: .stringAttributeType),
             attribute("aliases", type: .binaryDataAttributeType, optional: true),
-            attribute("createdAt", type: .dateAttributeType)
+            attribute("createdAt", type: .dateAttributeType),
+            attribute("profileID", type: .UUIDAttributeType, optional: true)
         ]
 
         model.entities = [userProfile, scanRecord, appSettings, customAllergen]
@@ -362,6 +475,7 @@ final class ScanRecordEntity: NSManagedObject {
     @NSManaged var matches: Data?
     @NSManaged var riskLevel: String?
     @NSManaged var createdAt: Date?
+    @NSManaged var profileID: UUID?
 
     @nonobjc class func fetchRequest() -> NSFetchRequest<ScanRecordEntity> {
         NSFetchRequest<ScanRecordEntity>(entityName: "ScanRecordEntity")
@@ -374,6 +488,7 @@ final class CustomAllergenEntity: NSManagedObject {
     @NSManaged var name: String?
     @NSManaged var aliases: Data?
     @NSManaged var createdAt: Date?
+    @NSManaged var profileID: UUID?
 
     @nonobjc class func fetchRequest() -> NSFetchRequest<CustomAllergenEntity> {
         NSFetchRequest<CustomAllergenEntity>(entityName: "CustomAllergenEntity")
