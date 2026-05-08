@@ -644,7 +644,11 @@ struct AllergenDetectionService {
     }
 
     private func containsWholePhrase(_ phrase: String, in text: String) -> Bool {
-        text.range(of: "(^| )\(NSRegularExpression.escapedPattern(for: phrase))( |$)", options: .regularExpression) != nil
+        let escaped = NSRegularExpression.escapedPattern(for: phrase)
+        // Word-boundary match with optional English plural suffix so that
+        // "peanut" matches "peanuts", "egg" matches "eggs", "soybean" matches "soybeans".
+        let pattern = "\\b\(escaped)s?\\b"
+        return text.range(of: pattern, options: .regularExpression) != nil
     }
 
     private func collapsedPhraseMatch(candidate: String, phrases: [String], collapsedText: String) -> String? {

@@ -104,6 +104,26 @@ final class AllerScanTests: XCTestCase {
         XCTAssertTrue(result.matches.isEmpty)
     }
 
+    func testPluralIngredientsAreMatched() async {
+        // Translated labels often use plural forms (peanuts, eggs, soybeans).
+        // The detector must match the singular allergen alias against the plural.
+        let tracked = AllergenCatalog.defaults.filter { ["peanut", "egg", "soy"].contains($0.id) }
+        let raw = "Ingredients: wheat flour, sugar, peanuts, eggs, soybeans"
+        let scan = RecognizedScan(
+            textBlocks: [raw],
+            rawText: raw,
+            normalizedText: ScanService.normalize(raw)
+        )
+
+        let result = await AllergenDetectionService(useFoundationModel: false).analyze(scan: scan, trackedAllergens: tracked)
+
+        let matchedIDs = Set(result.matches.map(\.allergenID))
+        XCTAssertTrue(matchedIDs.contains("peanut"), "Should detect 'peanuts' as peanut allergen")
+        XCTAssertTrue(matchedIDs.contains("egg"), "Should detect 'eggs' as egg allergen")
+        XCTAssertTrue(matchedIDs.contains("soy"), "Should detect 'soybeans' as soy allergen")
+        XCTAssertEqual(result.riskLevel, .highRisk)
+    }
+
     func testEmptyTrackedAllergensProducesSafeOrUnchangedResult() async {
         let scan = RecognizedScan(
             textBlocks: ["Ingredients: peanut, milk, wheat"],
