@@ -76,6 +76,8 @@ final class AppViewModel: ObservableObject {
         try? store.updateSecuritySettings(updated)
     }
 
+    @Published var editingProfileID: UUID?
+
     func saveProfile() {
         let trimmedName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty, !selectedAllergenIDs.isEmpty else {
@@ -83,16 +85,57 @@ final class AppViewModel: ObservableObject {
             return
         }
 
+        let targetID = editingProfileID ?? store.activeProfile?.id ?? UUID()
+        let existing = store.profiles.first { $0.id == targetID }
+
         let profile = UserProfile(
-            id: store.activeProfile?.id ?? UUID(),
+            id: targetID,
             name: trimmedName,
             trackedAllergenIDs: selectedAllergenIDs.sorted(),
-            createdAt: store.activeProfile?.createdAt ?? .now
+            createdAt: existing?.createdAt ?? .now
         )
 
         do {
             try store.saveProfile(profile)
+            if existing == nil {
+                store.setActiveProfile(id: profile.id)
+            }
             isEditingProfile = false
+            editingProfileID = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func startCreatingNewProfile() {
+        editingProfileID = nil
+        profileName = ""
+        selectedAllergenIDs = Set(AllergenCatalog.defaults.prefix(4).map(\.id))
+        isEditingProfile = true
+    }
+
+    func startEditingProfile(_ profile: UserProfile) {
+        editingProfileID = profile.id
+        profileName = profile.name
+        selectedAllergenIDs = Set(profile.trackedAllergenIDs)
+        isEditingProfile = true
+    }
+
+    func switchActiveProfile(to id: UUID) {
+        store.setActiveProfile(id: id)
+        if let profile = store.profiles.first(where: { $0.id == id }) {
+            profileName = profile.name
+            selectedAllergenIDs = Set(profile.trackedAllergenIDs)
+        }
+    }
+
+    func deleteProfile(id: UUID) {
+        guard store.profiles.count > 1 else {
+            lastErrorMessage = "You need at least one profile."
+            return
+        }
+        do {
+            try store.deleteProfile(id: id)
         } catch {
             lastErrorMessage = error.localizedDescription
         }

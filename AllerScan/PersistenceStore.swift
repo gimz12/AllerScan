@@ -5,10 +5,18 @@ import Foundation
 @MainActor
 final class PersistenceStore: ObservableObject {
     @Published private(set) var isLoaded = false
-    @Published private(set) var activeProfile: UserProfile?
+    @Published private(set) var profiles: [UserProfile] = []
+    @Published private(set) var activeProfileID: UUID?
     @Published private(set) var scanHistory: [ScanRecord] = []
     @Published private(set) var securitySettings: SecuritySettings = .default
     @Published private(set) var customAllergens: [Allergen] = []
+
+    private let activeProfileKey = "AllerScan.activeProfileID"
+
+    var activeProfile: UserProfile? {
+        guard let id = activeProfileID else { return profiles.first }
+        return profiles.first { $0.id == id } ?? profiles.first
+    }
 
     let container: NSPersistentContainer
 
@@ -65,7 +73,8 @@ final class PersistenceStore: ObservableObject {
     }
 
     func refresh() {
-        activeProfile = fetchProfile()
+        profiles = fetchAllProfiles()
+        activeProfileID = loadActiveProfileID() ?? profiles.first?.id
         scanHistory = fetchHistory()
         securitySettings = fetchSecuritySettings()
         customAllergens = fetchCustomAllergens()
@@ -74,6 +83,7 @@ final class PersistenceStore: ObservableObject {
     func saveProfile(_ profile: UserProfile) throws {
         let context = container.viewContext
         let request = UserProfileEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", profile.id as CVarArg)
         let entity = (try? context.fetch(request).first) ?? UserProfileEntity(context: context)
         entity.id = profile.id
         entity.name = profile.name
@@ -81,6 +91,34 @@ final class PersistenceStore: ObservableObject {
         entity.createdAt = profile.createdAt
         try context.save()
         refresh()
+    }
+
+    func deleteProfile(id: UUID) throws {
+        let context = container.viewContext
+        let request = UserProfileEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        if let entity = try? context.fetch(request).first {
+            context.delete(entity)
+            try context.save()
+        }
+
+        if activeProfileID == id {
+            activeProfileID = nil
+            UserDefaults.standard.removeObject(forKey: activeProfileKey)
+        }
+
+        refresh()
+    }
+
+    func setActiveProfile(id: UUID) {
+        guard profiles.contains(where: { $0.id == id }) else { return }
+        activeProfileID = id
+        UserDefaults.standard.set(id.uuidString, forKey: activeProfileKey)
+    }
+
+    private func loadActiveProfileID() -> UUID? {
+        guard let raw = UserDefaults.standard.string(forKey: activeProfileKey) else { return nil }
+        return UUID(uuidString: raw)
     }
 
     func saveScanRecord(_ record: ScanRecord) throws {
@@ -149,23 +187,24 @@ final class PersistenceStore: ObservableObject {
         refresh()
     }
 
-    private func fetchProfile() -> UserProfile? {
+    private func fetchAllProfiles() -> [UserProfile] {
         let request = UserProfileEntity.fetchRequest()
-        request.fetchLimit = 1
-        guard let entity = try? container.viewContext.fetch(request).first,
-              let id = entity.id,
-              let name = entity.name,
-              let createdAt = entity.createdAt
-        else {
-            return nil
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \UserProfileEntity.createdAt, ascending: true)]
+        let entities = (try? container.viewContext.fetch(request)) ?? []
+        return entities.compactMap { entity in
+            guard let id = entity.id,
+                  let name = entity.name,
+                  let createdAt = entity.createdAt
+            else {
+                return nil
+            }
+            return UserProfile(
+                id: id,
+                name: name,
+                trackedAllergenIDs: decode([String].self, from: entity.trackedAllergenIDs) ?? [],
+                createdAt: createdAt
+            )
         }
-
-        return UserProfile(
-            id: id,
-            name: name,
-            trackedAllergenIDs: decode([String].self, from: entity.trackedAllergenIDs) ?? [],
-            createdAt: createdAt
-        )
     }
 
     private func fetchHistory() -> [ScanRecord] {

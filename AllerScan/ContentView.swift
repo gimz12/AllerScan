@@ -4,11 +4,23 @@ import Translation
 struct ContentView: View {
     @EnvironmentObject private var store: PersistenceStore
     @EnvironmentObject private var appModel: AppViewModel
+    @EnvironmentObject private var authService: AuthService
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
 
     var body: some View {
         Group {
-            if !store.isLoaded {
-                ProgressView("Loading AllerScan...")
+            if authService.isInitializing {
+                SplashView()
+            } else if authService.currentUser == nil {
+                if hasSeenWelcome {
+                    AuthFlowView()
+                } else {
+                    WelcomeView(onGetStarted: { hasSeenWelcome = true })
+                }
+            } else if !authService.isEmailVerified {
+                VerifyEmailView()
+            } else if !store.isLoaded {
+                SplashView()
             } else if appModel.isLocked && store.activeProfile != nil {
                 LockedView()
             } else if store.activeProfile == nil {
@@ -24,6 +36,853 @@ struct ContentView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(appModel.lastErrorMessage ?? "")
+        }
+    }
+}
+
+// MARK: - Splash
+
+private struct SplashView: View {
+    @State private var pulse = false
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
+            VStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(accentRed)
+                        .frame(width: 96, height: 96)
+                        .shadow(color: accentRed.opacity(0.35), radius: 20, y: 10)
+                        .scaleEffect(pulse ? 1.05 : 0.95)
+                        .opacity(pulse ? 1 : 0.85)
+                    Image(systemName: "shield.checkered")
+                        .font(.system(size: 44, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: pulse)
+
+                Text("AllerScan")
+                    .font(.title.bold())
+                    .foregroundStyle(accentRed)
+                Text("Smart Allergy Ingredient Checker")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { pulse = true }
+    }
+}
+
+// MARK: - Welcome
+
+private struct WelcomeView: View {
+    let onGetStarted: () -> Void
+    @State private var page = 0
+    @State private var goToLogin = false
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        if goToLogin {
+            AuthFlowView(initialScreen: .login)
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            TabView(selection: $page) {
+                welcomePage(
+                    illustration: scanIllustration,
+                    title: "Your Clinical ",
+                    titleAccent: "Guardian",
+                    titleSuffix: " for Food Safety",
+                    body: "Scan any product barcode or ingredient list to instantly identify allergens tailored to your health profile."
+                )
+                .tag(0)
+
+                welcomePage(
+                    illustration: travelIllustration,
+                    title: "Travel-Ready ",
+                    titleAccent: "Allergy Card",
+                    titleSuffix: " in 14 Languages",
+                    body: "Show your allergens to staff abroad in their language. Pre-translated phrases for emergencies and dining out."
+                )
+                .tag(1)
+
+                welcomePage(
+                    illustration: firstAidIllustration,
+                    title: "Step-by-Step ",
+                    titleAccent: "First Aid",
+                    titleSuffix: " Protocol",
+                    body: "Know exactly what to do during an allergic reaction. Time-stamped checklist, second-dose reminder, one-tap 911."
+                )
+                .tag(2)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+
+            HStack(spacing: 8) {
+                ForEach(0..<3, id: \.self) { index in
+                    Capsule()
+                        .fill(index == page ? accentRed : Color(.systemGray4))
+                        .frame(width: index == page ? 22 : 8, height: 8)
+                        .animation(.spring(duration: 0.25), value: page)
+                }
+            }
+            .padding(.bottom, 24)
+
+            VStack(spacing: 12) {
+                Button {
+                    if page < 2 {
+                        withAnimation { page += 1 }
+                    } else {
+                        onGetStarted()
+                    }
+                } label: {
+                    Text(page < 2 ? "Next" : "Get Started")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .foregroundStyle(.white)
+                        .background(
+                            LinearGradient(colors: [accentRed, accentRed.opacity(0.8)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                        .clipShape(Capsule())
+                }
+
+                Button {
+                    onGetStarted()
+                    goToLogin = true
+                } label: {
+                    Text("I already have an account")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.bottom, 8)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 12)
+        }
+        .background(Color(.systemGroupedBackground))
+    }
+
+    private func welcomePage(illustration: AnyView, title: String, titleAccent: String, titleSuffix: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 24) {
+            illustration
+                .frame(maxWidth: .infinity)
+                .frame(height: 320)
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 12) {
+                (Text(title) + Text(titleAccent).foregroundColor(accentRed) + Text(titleSuffix))
+                    .font(.system(size: 30, weight: .bold))
+                    .lineLimit(3)
+
+                Text(body)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+    }
+
+    private var scanIllustration: AnyView {
+        AnyView(
+            ZStack {
+                LinearGradient(colors: [Color(.systemGray6), Color(.tertiarySystemGroupedBackground)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                VStack(spacing: 16) {
+                    badgeCard(
+                        icon: "exclamationmark.triangle.fill",
+                        iconColor: accentRed,
+                        title: "Peanut Detected",
+                        subtitle: "Unsafe for your profile"
+                    )
+                    .offset(x: -30)
+
+                    badgeCard(
+                        icon: "checkmark.circle.fill",
+                        iconColor: .blue,
+                        title: "Verified Safe",
+                        subtitle: "Lactose-free certified"
+                    )
+                    .offset(x: 30)
+                }
+                .padding(20)
+            }
+        )
+    }
+
+    private var travelIllustration: AnyView {
+        AnyView(
+            ZStack {
+                LinearGradient(colors: [Color(.systemGray6), Color(.tertiarySystemGroupedBackground)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("ENGLISH").font(.caption.bold()).foregroundStyle(.secondary)
+                    Text("I am allergic to:").font(.headline.bold())
+                    Text("• Peanut  • Milk  • Wheat").font(.subheadline)
+
+                    Image(systemName: "character.bubble")
+                        .foregroundStyle(.tertiary)
+                        .padding(.vertical, 4)
+
+                    Text("FRANÇAIS").font(.caption.bold()).foregroundStyle(accentRed)
+                    Text("Je suis allergique à :").font(.headline.bold())
+                    Text("• Arachides  • Lait  • Blé").font(.subheadline)
+                }
+                .padding(20)
+                .background(.background)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(24)
+            }
+        )
+    }
+
+    private var firstAidIllustration: AnyView {
+        AnyView(
+            ZStack {
+                LinearGradient(colors: [Color(.systemGray6), Color(.tertiarySystemGroupedBackground)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                VStack(spacing: 12) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.white)
+                        Text("SEVERE FOOD ALLERGY")
+                            .font(.caption.weight(.heavy))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background(accentRed)
+                    .clipShape(Capsule())
+
+                    stepRow(num: "01", title: "Use Epinephrine")
+                    stepRow(num: "02", title: "Call 911")
+                    stepRow(num: "03", title: "Position Correctly")
+                }
+                .padding(20)
+            }
+        )
+    }
+
+    private func stepRow(num: String, title: String) -> some View {
+        HStack(spacing: 12) {
+            Text(num).font(.subheadline.bold()).foregroundStyle(accentRed)
+            Text(title).font(.subheadline.bold())
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func badgeCard(icon: String, iconColor: Color, title: String, subtitle: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(iconColor)
+                .frame(width: 36, height: 36)
+                .background(iconColor.opacity(0.12))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.bold())
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+    }
+}
+
+// MARK: - Auth Flow
+
+private enum AuthScreen: Hashable {
+    case login, signUp, resetPassword
+}
+
+private struct AuthFlowView: View {
+    var initialScreen: AuthScreen = .login
+    @State private var path: [AuthScreen] = []
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            content(for: initialScreen)
+                .navigationDestination(for: AuthScreen.self) { screen in
+                    content(for: screen)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func content(for screen: AuthScreen) -> some View {
+        switch screen {
+        case .login:
+            LoginView(
+                onSignUp: { path.append(.signUp) },
+                onForgotPassword: { path.append(.resetPassword) }
+            )
+        case .signUp:
+            SignUpView(onGoToLogin: { path = [] })
+        case .resetPassword:
+            ResetPasswordView(onBack: { path.removeLast() })
+        }
+    }
+}
+
+// MARK: - Login
+
+private struct LoginView: View {
+    var onSignUp: () -> Void
+    var onForgotPassword: () -> Void
+
+    @EnvironmentObject private var authService: AuthService
+    @State private var email = ""
+    @State private var password = ""
+    @State private var showPassword = false
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 22) {
+                logo
+                VStack(spacing: 6) {
+                    Text("Welcome Back")
+                        .font(.largeTitle.bold())
+                    Text("Continue your journey with AllerScan")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 16) {
+                    AuthField(label: "Email Address", placeholder: "example@clinical.com", text: $email,
+                              keyboard: .emailAddress, contentType: .emailAddress)
+                    AuthPasswordField(label: "Password", text: $password, showPassword: $showPassword)
+
+                    HStack {
+                        Spacer()
+                        Button("Forgot Password?", action: onForgotPassword)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(accentRed)
+                    }
+                }
+
+                primaryButton
+
+                Button("Don't have an account? Sign Up") {
+                    onSignUp()
+                }
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .padding(.top, 8)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(accentRed)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding()
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Log In")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var logo: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(accentRed)
+                .frame(width: 72, height: 72)
+            Image(systemName: "shield.checkered")
+                .font(.system(size: 32, weight: .bold))
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var primaryButton: some View {
+        Button {
+            Task { await submit() }
+        } label: {
+            ZStack {
+                if isSubmitting {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Log In")
+                        .font(.headline)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .foregroundStyle(.white)
+            .background(
+                LinearGradient(colors: [accentRed, accentRed.opacity(0.85)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            .clipShape(Capsule())
+        }
+        .disabled(isSubmitting || email.isEmpty || password.isEmpty)
+    }
+
+    private func submit() async {
+        errorMessage = nil
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            try await authService.signIn(email: email, password: password)
+        } catch {
+            errorMessage = AuthService.describe(error)
+        }
+    }
+}
+
+// MARK: - Sign Up
+
+private struct SignUpView: View {
+    var onGoToLogin: () -> Void
+
+    @EnvironmentObject private var authService: AuthService
+    @State private var fullName = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var showPassword = false
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 22) {
+                logo
+                VStack(spacing: 6) {
+                    Text("Create Your Account")
+                        .font(.largeTitle.bold())
+                    Text("Join AllerScan to start scanning safely")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 16) {
+                    AuthField(label: "Full Name", placeholder: "Enter your full name", text: $fullName,
+                              keyboard: .default, contentType: .name)
+                    AuthField(label: "Email Address", placeholder: "example@clinical.com", text: $email,
+                              keyboard: .emailAddress, contentType: .emailAddress)
+                    AuthPasswordField(label: "Password", text: $password, showPassword: $showPassword)
+                    Text("Use at least 6 characters.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                primaryButton
+
+                Button("Already have an account? Log In") {
+                    onGoToLogin()
+                }
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .padding(.top, 8)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(accentRed)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding()
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Create Account")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var logo: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(accentRed)
+                .frame(width: 72, height: 72)
+            Image(systemName: "shield.checkered")
+                .font(.system(size: 32, weight: .bold))
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var primaryButton: some View {
+        Button {
+            Task { await submit() }
+        } label: {
+            ZStack {
+                if isSubmitting {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Create Account")
+                        .font(.headline)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .foregroundStyle(.white)
+            .background(
+                LinearGradient(colors: [accentRed, accentRed.opacity(0.85)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            .clipShape(Capsule())
+        }
+        .disabled(isSubmitting || fullName.isEmpty || email.isEmpty || password.count < 6)
+    }
+
+    private func submit() async {
+        errorMessage = nil
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            try await authService.signUp(name: fullName, email: email, password: password)
+        } catch {
+            errorMessage = AuthService.describe(error)
+        }
+    }
+}
+
+// MARK: - Reset Password
+
+private struct ResetPasswordView: View {
+    var onBack: () -> Void
+
+    @EnvironmentObject private var authService: AuthService
+    @State private var email = ""
+    @State private var isSubmitting = false
+    @State private var didSend = false
+    @State private var errorMessage: String?
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 22) {
+                logo
+
+                VStack(spacing: 6) {
+                    Text("Reset Password")
+                        .font(.largeTitle.bold())
+                    Text(didSend
+                         ? "Check your inbox for the reset link."
+                         : "Enter your email address and we'll send you instructions to reset your password.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                if !didSend {
+                    AuthField(label: "Email Address", placeholder: "example@clinical.com", text: $email,
+                              keyboard: .emailAddress, contentType: .emailAddress)
+
+                    primaryButton
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(accentRed)
+                        .multilineTextAlignment(.center)
+                }
+
+                Spacer(minLength: 80)
+
+                Button("Remember your password? Log In") { onBack() }
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+            }
+            .padding()
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Security")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var logo: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(accentRed)
+                .frame(width: 72, height: 72)
+            Image(systemName: "shield.checkered")
+                .font(.system(size: 32, weight: .bold))
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var primaryButton: some View {
+        Button {
+            Task { await submit() }
+        } label: {
+            ZStack {
+                if isSubmitting { ProgressView().tint(.white) }
+                else {
+                    Text("Send Reset Link").font(.headline)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .foregroundStyle(.white)
+            .background(
+                LinearGradient(colors: [accentRed, accentRed.opacity(0.85)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            .clipShape(Capsule())
+        }
+        .disabled(isSubmitting || email.isEmpty)
+    }
+
+    private func submit() async {
+        errorMessage = nil
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            try await authService.sendPasswordReset(email: email)
+            didSend = true
+        } catch {
+            errorMessage = AuthService.describe(error)
+        }
+    }
+}
+
+// MARK: - Verify Email
+
+private struct VerifyEmailView: View {
+    @EnvironmentObject private var authService: AuthService
+    @State private var isResending = false
+    @State private var isChecking = false
+    @State private var resendCooldown = 0
+    @State private var errorMessage: String?
+    @State private var resendBanner: String?
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer().frame(height: 24)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(accentRed)
+                    .frame(width: 72, height: 72)
+                Image(systemName: "shield.checkered")
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(spacing: 6) {
+                Text("Verify Email").font(.largeTitle.bold())
+                Text("We sent a verification link to ")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                +
+                Text(authService.email)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.primary)
+                +
+                Text(". Open the email and tap the link, then return here.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                Button {
+                    Task { await checkVerified() }
+                } label: {
+                    ZStack {
+                        if isChecking { ProgressView().tint(.white) }
+                        else { Text("I've Verified My Email").font(.headline) }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .foregroundStyle(.white)
+                    .background(
+                        LinearGradient(colors: [accentRed, accentRed.opacity(0.85)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .clipShape(Capsule())
+                }
+                .disabled(isChecking)
+
+                Button {
+                    Task { await resend() }
+                } label: {
+                    HStack(spacing: 6) {
+                        if isResending { ProgressView() }
+                        Text(resendCooldown > 0 ? "Resend in \(resendCooldown)s" : "Resend Email")
+                            .font(.subheadline.bold())
+                    }
+                    .foregroundStyle(resendCooldown > 0 ? .secondary : accentRed)
+                }
+                .disabled(isResending || resendCooldown > 0)
+
+                Button("Sign Out") {
+                    try? authService.signOut()
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            }
+            .padding(.horizontal)
+
+            if let resendBanner {
+                Label(resendBanner, systemImage: "checkmark.circle.fill")
+                    .font(.caption.bold())
+                    .foregroundStyle(.green)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(accentRed)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+
+            Spacer()
+
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(accentRed)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Secure Verification").font(.subheadline.bold())
+                    Text("Verifying your email keeps your allergy profile private and secure across devices.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal)
+            .padding(.bottom, 16)
+        }
+        .background(Color(.systemGroupedBackground))
+        .task {
+            // Auto-poll every 4 seconds in case the user verifies in the email app and returns.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if let verified = try? await authService.refreshVerificationStatus(), verified {
+                    break
+                }
+            }
+        }
+    }
+
+    private func checkVerified() async {
+        errorMessage = nil
+        isChecking = true
+        defer { isChecking = false }
+        do {
+            let verified = try await authService.refreshVerificationStatus()
+            if !verified {
+                errorMessage = "Email not verified yet. Tap the link in your email then try again."
+            }
+        } catch {
+            errorMessage = AuthService.describe(error)
+        }
+    }
+
+    private func resend() async {
+        errorMessage = nil
+        resendBanner = nil
+        isResending = true
+        defer { isResending = false }
+        do {
+            try await authService.resendVerificationEmail()
+            resendBanner = "Verification email resent."
+            startCooldown()
+        } catch {
+            errorMessage = AuthService.describe(error)
+        }
+    }
+
+    private func startCooldown() {
+        resendCooldown = 30
+        Task {
+            while resendCooldown > 0 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                resendCooldown -= 1
+            }
+        }
+    }
+}
+
+// MARK: - Auth Field Helpers
+
+private struct AuthField: View {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    var keyboard: UIKeyboardType = .default
+    var contentType: UITextContentType?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label).font(.subheadline.bold())
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .keyboardType(keyboard)
+                .textContentType(contentType)
+                .textInputAutocapitalization(keyboard == .emailAddress ? .never : .words)
+                .autocorrectionDisabled(keyboard == .emailAddress)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 14)
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+}
+
+private struct AuthPasswordField: View {
+    let label: String
+    @Binding var text: String
+    @Binding var showPassword: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label).font(.subheadline.bold())
+            HStack {
+                Group {
+                    if showPassword {
+                        TextField("••••••••", text: $text)
+                    } else {
+                        SecureField("••••••••", text: $text)
+                    }
+                }
+                .textContentType(.password)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                Button { showPassword.toggle() } label: {
+                    Image(systemName: showPassword ? "eye.slash" : "eye")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 }
@@ -237,6 +1096,7 @@ private struct AddCustomAllergenSheet: View {
 }
 
 private struct MainTabView: View {
+    @EnvironmentObject private var appModel: AppViewModel
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
 
     var body: some View {
@@ -257,6 +1117,18 @@ private struct MainTabView: View {
                 }
         }
         .tint(accentRed)
+        .sheet(isPresented: $appModel.isEditingProfile) {
+            NavigationStack {
+                OnboardingView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") {
+                                appModel.isEditingProfile = false
+                            }
+                        }
+                    }
+            }
+        }
     }
 }
 
@@ -342,8 +1214,39 @@ private struct DashboardScreen: View {
                         .font(.title2.bold())
                         .foregroundStyle(accentRed)
                 }
-                Text("Hello, \(store.activeProfile?.name ?? "there")")
-                    .font(.title3.bold())
+                Menu {
+                    ForEach(store.profiles) { profile in
+                        Button {
+                            appModel.switchActiveProfile(to: profile.id)
+                        } label: {
+                            HStack {
+                                Text(profile.name)
+                                if profile.id == store.activeProfile?.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                    if store.profiles.count > 0 {
+                        Divider()
+                    }
+                    Button {
+                        appModel.startCreatingNewProfile()
+                    } label: {
+                        Label("Add profile", systemImage: "plus")
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Hello, \(store.activeProfile?.name ?? "there")")
+                            .font(.title3.bold())
+                            .foregroundStyle(.primary)
+                        if store.profiles.count > 1 {
+                            Image(systemName: "chevron.down.circle.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 Text("Ready to stay safe today?")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -3401,6 +4304,7 @@ private struct HistoryScreen: View {
 private struct SettingsScreen: View {
     @EnvironmentObject private var appModel: AppViewModel
     @EnvironmentObject private var store: PersistenceStore
+    @EnvironmentObject private var authService: AuthService
 
     @State private var contactName = ""
     @State private var contactPhone = ""
@@ -3409,20 +4313,32 @@ private struct SettingsScreen: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Profile") {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(store.activeProfile?.name ?? "No profile")
-                            .font(.headline)
-                        Text("\(store.activeProfile?.trackedAllergenIDs.count ?? 0) tracked allergens")
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("Edit profile") {
-                        if let profile = store.activeProfile {
-                            appModel.profileName = profile.name
-                            appModel.selectedAllergenIDs = Set(profile.trackedAllergenIDs)
-                            appModel.isEditingProfile = true
+                Section {
+                    NavigationLink {
+                        ProfilesScreen()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Image(systemName: "person.crop.circle.fill")
+                                    .foregroundStyle(.blue)
+                                Text(store.activeProfile?.name ?? "No profile")
+                                    .font(.headline)
+                            }
+                            Text("\(store.profiles.count) profile\(store.profiles.count == 1 ? "" : "s") • \(store.activeProfile?.trackedAllergenIDs.count ?? 0) tracked allergens")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
+                    Button("Edit current profile") {
+                        if let profile = store.activeProfile {
+                            appModel.startEditingProfile(profile)
+                        }
+                    }
+                } header: {
+                    Text("Profile")
+                } footer: {
+                    Text("Tap above to switch between family members or add a new profile.")
+                        .font(.caption)
                 }
 
                 Section {
@@ -3515,6 +4431,19 @@ private struct SettingsScreen: View {
                     )
                     .disabled(!store.securitySettings.notificationsEnabled)
                 }
+
+                Section {
+                    Button(role: .destructive) {
+                        try? authService.signOut()
+                    } label: {
+                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                } footer: {
+                    if !authService.email.isEmpty {
+                        Text("Signed in as \(authService.email)")
+                            .font(.caption)
+                    }
+                }
             }
             .navigationTitle("Settings")
             .onAppear {
@@ -3526,18 +4455,6 @@ private struct SettingsScreen: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Your tracked allergens are on the clipboard. In Health: tap your photo → Medical ID → Edit → Allergies & Reactions, then paste.")
-            }
-            .sheet(isPresented: $appModel.isEditingProfile) {
-                NavigationStack {
-                    OnboardingView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("Done") {
-                                    appModel.isEditingProfile = false
-                                }
-                            }
-                        }
-                }
             }
         }
     }
@@ -3553,6 +4470,100 @@ private struct SettingsScreen: View {
         if let url = URL(string: "x-apple-health://"), UIApplication.shared.canOpenURL(url) {
             UIApplication.shared.open(url)
         }
+    }
+}
+
+private struct ProfilesScreen: View {
+    @EnvironmentObject private var appModel: AppViewModel
+    @EnvironmentObject private var store: PersistenceStore
+    @State private var profileToDelete: UserProfile?
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(store.profiles) { profile in
+                    profileRow(profile)
+                }
+            } header: {
+                Text("Profiles")
+            } footer: {
+                Text("Switch between profiles to scan ingredients against different allergen lists. Useful for families.")
+                    .font(.caption)
+            }
+
+            Section {
+                Button {
+                    appModel.startCreatingNewProfile()
+                } label: {
+                    Label("Add new profile", systemImage: "plus.circle.fill")
+                        .foregroundStyle(accentRed)
+                }
+            }
+        }
+        .navigationTitle("Profiles")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            "Delete profile?",
+            isPresented: Binding(get: { profileToDelete != nil }, set: { if !$0 { profileToDelete = nil } })
+        ) {
+            Button("Delete", role: .destructive) {
+                if let profile = profileToDelete {
+                    appModel.deleteProfile(id: profile.id)
+                }
+                profileToDelete = nil
+            }
+            Button("Cancel", role: .cancel) { profileToDelete = nil }
+        } message: {
+            Text("\"\(profileToDelete?.name ?? "")\" will be removed. This can't be undone.")
+        }
+    }
+
+    private func profileRow(_ profile: UserProfile) -> some View {
+        let isActive = profile.id == store.activeProfile?.id
+
+        return Button {
+            appModel.switchActiveProfile(to: profile.id)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isActive ? accentRed : Color(.tertiaryLabel))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("\(profile.trackedAllergenIDs.count) allergen\(profile.trackedAllergenIDs.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Menu {
+                    Button {
+                        appModel.startEditingProfile(profile)
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    if store.profiles.count > 1 {
+                        Button(role: .destructive) {
+                            profileToDelete = profile
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

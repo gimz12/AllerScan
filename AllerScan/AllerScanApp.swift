@@ -1,3 +1,4 @@
+import FirebaseCore
 import SwiftUI
 import UserNotifications
 
@@ -7,11 +8,14 @@ struct AllerScanApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var persistenceStore: PersistenceStore
     @StateObject private var appModel: AppViewModel
+    @StateObject private var authService: AuthService
 
     init() {
+        FirebaseApp.configure()
         let store = PersistenceStore()
         _persistenceStore = StateObject(wrappedValue: store)
         _appModel = StateObject(wrappedValue: AppViewModel(store: store))
+        _authService = StateObject(wrappedValue: AuthService())
     }
 
     var body: some Scene {
@@ -19,6 +23,7 @@ struct AllerScanApp: App {
             ContentView()
                 .environmentObject(persistenceStore)
                 .environmentObject(appModel)
+                .environmentObject(authService)
                 .environmentObject(EmergencyDeepLink.shared)
                 .task {
                     await appModel.bootstrap()
