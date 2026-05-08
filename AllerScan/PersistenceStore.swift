@@ -89,14 +89,37 @@ final class PersistenceStore: ObservableObject {
         let context = container.viewContext
         let request = UserProfileEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", profile.id as CVarArg)
+        let isNewProfile = (try? context.fetch(request).first) == nil
         let entity = (try? context.fetch(request).first) ?? UserProfileEntity(context: context)
         entity.id = profile.id
         entity.name = profile.name
         entity.trackedAllergenIDs = encode(profile.trackedAllergenIDs)
         entity.createdAt = profile.createdAt
+
+        // If this is a brand-new profile, claim any custom allergens that were added
+        // during initial onboarding (those have profileID = nil because no profile existed yet).
+        if isNewProfile {
+            claimOrphanedCustomAllergens(forProfile: profile.id, in: context)
+        }
+
         try context.save()
         refresh()
         syncService?.upload(profile: profile)
+    }
+
+    private func claimOrphanedCustomAllergens(forProfile profileID: UUID, in context: NSManagedObjectContext) {
+        let request = CustomAllergenEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "profileID == nil")
+        guard let orphans = try? context.fetch(request) else { return }
+        for orphan in orphans {
+            orphan.profileID = profileID
+            // Push the now-claimed allergen to Firestore under the new profile.
+            if let id = orphan.id, let name = orphan.name {
+                let aliases = decode([String].self, from: orphan.aliases) ?? [name.lowercased()]
+                let allergen = Allergen(id: id, name: name, aliases: aliases, hiddenAliases: [], negativeContexts: [])
+                syncService?.upload(customAllergen: allergen, profileID: profileID)
+            }
+        }
     }
 
     func deleteProfile(id: UUID) throws {

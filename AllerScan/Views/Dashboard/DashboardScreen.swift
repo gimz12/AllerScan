@@ -4,10 +4,17 @@ struct DashboardScreen: View {
     @EnvironmentObject private var appModel: AppViewModel
     @EnvironmentObject private var store: PersistenceStore
     @EnvironmentObject private var emergencyDeepLink: EmergencyDeepLink
-    @State private var showScanner = false
-    @State private var showTranslation = false
-    @State private var showTravelCard = false
-    @State private var showFirstAid = false
+
+    /// Single source of truth for which full-screen modal is shown.
+    /// SwiftUI fights you when you stack multiple `.fullScreenCover` modifiers
+    /// on the same view — switching between them during a dismiss transition
+    /// can silently fail. Using one enum-driven cover avoids the race.
+    enum DashboardModal: Identifiable {
+        case scanner, translation, travelCard, firstAid
+        var id: Self { self }
+    }
+
+    @State private var presentedModal: DashboardModal?
     @State private var showProfiles = false
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
@@ -40,17 +47,13 @@ struct DashboardScreen: View {
             .padding()
         }
         .background(Color(.systemGroupedBackground))
-        .fullScreenCover(isPresented: $showScanner) {
-            ScannerScreen()
-        }
-        .fullScreenCover(isPresented: $showTranslation) {
-            TranslationScreen()
-        }
-        .fullScreenCover(isPresented: $showTravelCard) {
-            TravelCardScreen()
-        }
-        .fullScreenCover(isPresented: $showFirstAid) {
-            FirstAidListScreen()
+        .fullScreenCover(item: $presentedModal) { modal in
+            switch modal {
+            case .scanner:     ScannerScreen()
+            case .translation: TranslationScreen()
+            case .travelCard:  TravelCardScreen()
+            case .firstAid:    FirstAidListScreen()
+            }
         }
         .sheet(isPresented: $showProfiles) {
             NavigationStack {
@@ -64,13 +67,13 @@ struct DashboardScreen: View {
         }
         .onChange(of: emergencyDeepLink.shouldOpenFirstAid) { _, shouldOpen in
             if shouldOpen {
-                showFirstAid = true
+                presentedModal = .firstAid
                 emergencyDeepLink.shouldOpenFirstAid = false
             }
         }
         .task {
             if emergencyDeepLink.shouldOpenFirstAid {
-                showFirstAid = true
+                presentedModal = .firstAid
                 emergencyDeepLink.shouldOpenFirstAid = false
             }
         }
@@ -139,7 +142,7 @@ struct DashboardScreen: View {
     // MARK: Quick Scan
 
     private var quickScanCard: some View {
-        Button { showScanner = true } label: {
+        Button { presentedModal = .scanner } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("QUICK SCAN")
@@ -182,17 +185,17 @@ struct DashboardScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            Button { showFirstAid = true } label: {
+            Button { presentedModal = .firstAid } label: {
                 toolkitRow(icon: "cross.case.fill", color: .red, title: "First Aid Guide", subtitle: "Emergency protocol for reactions")
             }
             .buttonStyle(.plain)
 
             HStack(spacing: 10) {
-                Button { showTravelCard = true } label: {
+                Button { presentedModal = .travelCard } label: {
                     toolkitCard(icon: "globe", color: .blue, title: "Travel Allergy Card", subtitle: "Digital cards for international travel")
                 }
                 .buttonStyle(.plain)
-                Button { showTranslation = true } label: {
+                Button { presentedModal = .translation } label: {
                     toolkitCard(icon: "character.book.closed.fill", color: .purple, title: "Translation Mode", subtitle: "Translate labels in 17 languages")
                 }
                 .buttonStyle(.plain)
