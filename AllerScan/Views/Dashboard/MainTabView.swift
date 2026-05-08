@@ -2,7 +2,9 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject private var appModel: AppViewModel
-    @SceneStorage("AllerScan.selectedTab") private var selectedTab = 0
+    // Use @State, not @SceneStorage — we want each fresh sign-in to land on Home,
+    // not on whichever tab the previous session ended on.
+    @State private var selectedTab = 0
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
 
     var body: some View {

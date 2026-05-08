@@ -42,18 +42,24 @@ struct AllerScanApp: App {
     }
 
     private var authStateID: String {
-        "\(authService.uid ?? "anon")_\(authService.isEmailVerified)"
+        "\(authService.uid ?? "anon")_\(authService.isEmailVerified)_\(authService.isInitializing)"
     }
 
     private func handleAuthChange() async {
+        // Skip while Firebase is still resolving the cached session — otherwise
+        // the brief "uid is nil" period is misread as sign-out and wipes local data,
+        // causing the OnboardingView to flash on every app launch.
+        guard !authService.isInitializing else { return }
+
         let lastSyncedKey = "AllerScan.lastSyncedUID"
         syncService.updateAuthState(isAuthenticated: authService.uid != nil)
 
         if let uid = authService.uid, authService.isEmailVerified {
             let previous = UserDefaults.standard.string(forKey: lastSyncedKey)
             if previous != uid {
-                // First sign-in (or different account) → wipe local data, then pull from Firestore.
-                persistenceStore.clearSyncableLocalData()
+                // First sign-in (or different account) → pull from Firestore.
+                // Flag the store so ContentView shows SplashView (not OnboardingView) while we're pulling.
+                persistenceStore.isInitialSyncInProgress = true
                 do {
                     let snapshot = try await syncService.pullAll()
                     try persistenceStore.applyRemoteSnapshot(snapshot)
@@ -61,12 +67,14 @@ struct AllerScanApp: App {
                 } catch {
                     print("[Sync] initial pull failed: \(error.localizedDescription)")
                 }
+                persistenceStore.isInitialSyncInProgress = false
                 UserDefaults.standard.set(uid, forKey: lastSyncedKey)
             } else {
                 syncService.markSyncedNow()
             }
         } else if authService.uid == nil {
-            // Signed out → clear local data so next user doesn't see previous data.
+            // Genuinely signed out (initialization is complete and uid is nil) →
+            // clear local data so next user doesn't see previous data.
             persistenceStore.clearSyncableLocalData()
             UserDefaults.standard.removeObject(forKey: lastSyncedKey)
         }

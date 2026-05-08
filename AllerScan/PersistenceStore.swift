@@ -5,6 +5,7 @@ import Foundation
 @MainActor
 final class PersistenceStore: ObservableObject {
     @Published private(set) var isLoaded = false
+    @Published var isInitialSyncInProgress = false
     @Published private(set) var profiles: [UserProfile] = []
     @Published private(set) var activeProfileID: UUID?
     @Published private(set) var scanHistory: [ScanRecord] = []

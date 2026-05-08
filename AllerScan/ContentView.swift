@@ -21,7 +21,7 @@ struct ContentView: View {
                 }
             } else if !authService.isEmailVerified {
                 VerifyEmailView()
-            } else if !store.isLoaded {
+            } else if !store.isLoaded || store.isInitialSyncInProgress {
                 SplashView()
             } else if store.activeProfile == nil {
                 OnboardingView()
