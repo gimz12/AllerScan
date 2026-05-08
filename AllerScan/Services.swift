@@ -124,6 +124,68 @@ struct ScanService {
         return score
     }
 
+    func recognizeMultiLanguage(from image: UIImage) async throws -> RecognizedScan {
+        var candidates: [RecognizedScan] = []
+        let preparedImage = image.preparedForOCR(maxDimension: 2200)
+
+        for rotation in preparedImage.ocrRotations {
+            let cgImage = autoreleasepool {
+                preparedImage.rotated(by: rotation)?.cgImage
+            }
+            guard let cgImage else { continue }
+            do {
+                let recognized = try await recognizeTextAutoLanguage(from: cgImage)
+                if !recognized.normalizedText.isEmpty {
+                    candidates.append(recognized)
+                }
+            } catch ScanError.noTextFound {
+                continue
+            }
+        }
+
+        guard let best = candidates.max(by: { $0.rawText.count < $1.rawText.count }) else {
+            throw ScanError.noTextFound
+        }
+
+        return best
+    }
+
+    private func recognizeTextAutoLanguage(from cgImage: CGImage) async throws -> RecognizedScan {
+        return try await withCheckedThrowingContinuation { continuation in
+            let request = VNRecognizeTextRequest { request, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
+                let blocks = Self.mergeIntoLines(observations)
+                let rawText = blocks.joined(separator: "\n")
+                let normalized = Self.normalize(rawText)
+
+                guard !normalized.isEmpty else {
+                    continuation.resume(throwing: ScanError.noTextFound)
+                    return
+                }
+
+                continuation.resume(returning: RecognizedScan(textBlocks: blocks, rawText: rawText, normalizedText: normalized))
+            }
+
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            request.automaticallyDetectsLanguage = true
+            request.recognitionLanguages = ["ja-JP", "ko-KR", "zh-Hans", "zh-Hant", "th-TH", "en-US"]
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request])
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
     nonisolated static func normalize(_ text: String) -> String {
         text
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
@@ -721,5 +783,138 @@ final class HapticsService {
         guard let pattern = try? CHHapticPattern(events: events, parameters: []) else { return }
         let player = try? engine.makePlayer(with: pattern)
         try? player?.start(atTime: 0)
+    }
+}
+
+struct TranslationService {
+    func detectLanguage(for text: String) -> (code: String, name: String)? {
+        let counts = scriptCounts(in: text)
+
+        if counts.thai > 0 {
+            return ("th", "Thai")
+        }
+
+        let totalCJK = counts.han + counts.hiragana + counts.katakana + counts.hangul
+
+        if totalCJK > 0 {
+            let hangulRatio = Double(counts.hangul) / Double(totalCJK)
+            let kanaRatio = Double(counts.hiragana + counts.katakana) / Double(totalCJK)
+
+            if hangulRatio >= 0.5 {
+                return ("ko", "Korean")
+            }
+            if counts.hiragana > 0 || kanaRatio >= 0.15 {
+                return ("ja", "Japanese")
+            }
+            if counts.han > 0 {
+                return ("zh-Hans", "Chinese")
+            }
+            if counts.hangul > 0 {
+                return ("ko", "Korean")
+            }
+            if counts.katakana > 0 {
+                return ("ja", "Japanese")
+            }
+        }
+
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        let hypotheses = recognizer.languageHypotheses(withMaximum: 3)
+
+        let preferred = hypotheses
+            .sorted { $0.value > $1.value }
+            .map(\.key)
+            .first { $0 != .english } ?? recognizer.dominantLanguage
+
+        guard let language = preferred else { return nil }
+        let code = normalizedLanguageCode(for: language.rawValue)
+        let displayCode = code.components(separatedBy: "-").first ?? code
+        let name = Locale.current.localizedString(forLanguageCode: displayCode)?.capitalized ?? code.uppercased()
+        return (code, name)
+    }
+
+    func findAllergenOccurrences(in text: String, trackedAllergens: [Allergen]) -> [TranslationAllergenChip] {
+        let lowered = text.lowercased()
+        var chips: [TranslationAllergenChip] = []
+        var seen: Set<String> = []
+
+        for allergen in trackedAllergens {
+            guard !seen.contains(allergen.id) else { continue }
+            let terms = [allergen.name.lowercased()] + allergen.aliases.map { $0.lowercased() } + allergen.hiddenAliases.map { $0.lowercased() }
+
+            for term in terms {
+                if lowered.contains(term) {
+                    let isTrace = isInTracesContext(term: term, in: lowered)
+                    chips.append(TranslationAllergenChip(
+                        allergenID: allergen.id,
+                        displayName: allergenChipLabel(for: allergen.id, name: allergen.name),
+                        isTrace: isTrace
+                    ))
+                    seen.insert(allergen.id)
+                    break
+                }
+            }
+        }
+
+        return chips
+    }
+
+    private func isInTracesContext(term: String, in text: String) -> Bool {
+        guard let range = text.range(of: term) else { return false }
+        let lookbackStart = text.index(range.lowerBound, offsetBy: -80, limitedBy: text.startIndex) ?? text.startIndex
+        let prefix = String(text[lookbackStart..<range.lowerBound])
+        return prefix.contains("trace") || prefix.contains("may contain")
+    }
+
+    private func allergenChipLabel(for id: String, name: String) -> String {
+        switch id {
+        case "wheat": return "GLUTEN"
+        case "milk": return "DAIRY"
+        case "egg": return "EGGS"
+        case "tree_nut": return "NUTS"
+        default: return name.uppercased()
+        }
+    }
+
+    private func normalizedLanguageCode(for code: String) -> String {
+        switch code {
+        case "ja": return "ja"
+        case "ko": return "ko"
+        case "zh", "zh-Hans", "zh-Hant": return "zh-Hans"
+        case "th": return "th"
+        default: return code
+        }
+    }
+
+    private func scriptCounts(in text: String) -> (han: Int, hiragana: Int, katakana: Int, hangul: Int, thai: Int) {
+        var han = 0
+        var hiragana = 0
+        var katakana = 0
+        var hangul = 0
+        var thai = 0
+
+        for scalar in text.unicodeScalars {
+            let value = scalar.value
+            if (0x3040...0x309F).contains(value) {
+                hiragana += 1
+            } else if (0x30A0...0x30FF).contains(value) || (0x31F0...0x31FF).contains(value) {
+                katakana += 1
+            } else if (0xAC00...0xD7AF).contains(value)
+                || (0x1100...0x11FF).contains(value)
+                || (0x3130...0x318F).contains(value)
+                || (0xA960...0xA97F).contains(value)
+                || (0xD7B0...0xD7FF).contains(value) {
+                hangul += 1
+            } else if (0x0E00...0x0E7F).contains(value) {
+                thai += 1
+            } else if (0x4E00...0x9FFF).contains(value)
+                || (0x3400...0x4DBF).contains(value)
+                || (0x20000...0x2A6DF).contains(value)
+                || (0xF900...0xFAFF).contains(value) {
+                han += 1
+            }
+        }
+
+        return (han, hiragana, katakana, hangul, thai)
     }
 }

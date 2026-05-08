@@ -118,6 +118,25 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func analyzeTranslatedText(_ text: String) async {
+        isProcessingScan = true
+        lastErrorMessage = nil
+
+        defer { isProcessingScan = false }
+
+        let scan = RecognizedScan(textBlocks: [text], rawText: text, normalizedText: ScanService.normalize(text))
+        let result = await detectionService.analyze(scan: scan, trackedAllergens: trackedAllergens)
+        let record = ScanRecord(result: result)
+
+        do {
+            try store.saveScanRecord(record)
+            selectedRecord = record
+            hapticsService.playResultFeedback(for: result.riskLevel)
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     func updateBiometricLock(_ enabled: Bool) async {
         var settings = store.securitySettings
         if enabled {

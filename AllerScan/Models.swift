@@ -185,3 +185,14 @@ struct RecognizedScan: Sendable {
     let rawText: String
     let normalizedText: String
 }
+
+struct TranslationAllergenChip: Identifiable, Hashable, Sendable {
+    var id: String { allergenID }
+    let allergenID: String
+    let displayName: String
+    let isTrace: Bool
+
+    var label: String {
+        isTrace ? "\(displayName) (TRACES)" : displayName
+    }
+}
