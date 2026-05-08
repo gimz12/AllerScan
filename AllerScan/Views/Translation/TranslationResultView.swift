@@ -246,52 +246,27 @@ struct TranslationResultView: View {
     // MARK: - Highlighted Text
 
     private func highlightedText(_ text: String) -> Text {
-        struct MatchInfo: Comparable {
-            let range: Range<String.Index>
-            let text: String
-            static func < (lhs: MatchInfo, rhs: MatchInfo) -> Bool {
-                lhs.range.lowerBound < rhs.range.lowerBound
-            }
-        }
+        var attributed = AttributedString(text)
 
-        var matches: [MatchInfo] = []
-
+        // Apply bold red highlight to every allergen alias / hidden-alias occurrence.
+        // Longer terms first so "milk powder" beats "milk" — applying the same
+        // formatting twice on overlapping ranges is harmless.
         for allergen in trackedAllergens {
             let terms = [allergen.name] + allergen.aliases + allergen.hiddenAliases
             let sortedTerms = terms.sorted { $0.count > $1.count }
 
             for term in sortedTerms {
-                var searchStart = text.startIndex
-                while searchStart < text.endIndex {
-                    guard let foundRange = text.range(of: term, options: .caseInsensitive, range: searchStart..<text.endIndex) else { break }
-                    let overlaps = matches.contains { $0.range.overlaps(foundRange) }
-                    if !overlaps {
-                        matches.append(MatchInfo(range: foundRange, text: String(text[foundRange])))
-                    }
-                    searchStart = foundRange.upperBound
+                var searchStart = attributed.startIndex
+                while searchStart < attributed.endIndex,
+                      let range = attributed[searchStart..<attributed.endIndex]
+                        .range(of: term, options: .caseInsensitive) {
+                    attributed[range].inlinePresentationIntent = .stronglyEmphasized
+                    attributed[range].foregroundColor = accentRed
+                    searchStart = range.upperBound
                 }
             }
         }
 
-        matches.sort()
-
-        if matches.isEmpty { return Text(text) }
-
-        var result = Text("")
-        var currentIndex = text.startIndex
-
-        for match in matches {
-            if currentIndex < match.range.lowerBound {
-                result = result + Text(text[currentIndex..<match.range.lowerBound])
-            }
-            result = result + Text(match.text).bold().foregroundColor(accentRed)
-            currentIndex = match.range.upperBound
-        }
-
-        if currentIndex < text.endIndex {
-            result = result + Text(text[currentIndex..<text.endIndex])
-        }
-
-        return result
+        return Text(attributed)
     }
 }

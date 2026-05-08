@@ -39,7 +39,8 @@ final class CameraCaptureModel: NSObject, ObservableObject {
 
         session.addInput(input)
         session.addOutput(photoOutput)
-        photoOutput.isHighResolutionCaptureEnabled = false
+        // iOS 16+ replaces isHighResolutionCaptureEnabled with maxPhotoDimensions.
+        // We keep the default (sensor-native) dimensions, so no further config needed.
         session.commitConfiguration()
         session.startRunning()
         statusMessage = "Align the ingredient label inside the frame."

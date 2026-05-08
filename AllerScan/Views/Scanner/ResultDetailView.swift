@@ -219,19 +219,15 @@ struct ResultDetailView: View {
             return Text("Potential allergens were detected.")
         }
 
-        let remaining = record.matches.dropFirst()
-        var result = Text("This product contains ")
-            + Text(first.matchedAlias).bold()
-            + Text(", which is a known ")
-            + Text(first.allergenName).bold()
-            + Text(" allergen in your safety profile.")
+        var sentence = "This product contains **\(first.matchedAlias)**, which is a known **\(first.allergenName)** allergen in your safety profile."
 
+        let remaining = record.matches.dropFirst()
         if !remaining.isEmpty {
             let others = remaining.map(\.matchedAlias).joined(separator: ", ")
-            result = result + Text(" Also detected: ") + Text(others).bold() + Text(".")
+            sentence += " Also detected: **\(others)**."
         }
 
-        return result
+        return Text(LocalizedStringKey(sentence))
     }
 
     // MARK: - Medical Guidance

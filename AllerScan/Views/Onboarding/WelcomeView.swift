@@ -102,7 +102,7 @@ struct WelcomeView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
             VStack(alignment: .leading, spacing: 12) {
-                (Text(title) + Text(titleAccent).foregroundColor(accentRed) + Text(titleSuffix))
+                Text("\(title)\(Text(titleAccent).foregroundStyle(accentRed))\(titleSuffix)")
                     .font(.system(size: 30, weight: .bold))
                     .lineLimit(3)
 

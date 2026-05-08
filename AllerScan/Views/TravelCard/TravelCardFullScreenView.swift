@@ -7,9 +7,16 @@ struct TravelCardFullScreenView: View {
     let profileName: String
 
     @Environment(\.dismiss) private var dismiss
-    @State private var originalBrightness: CGFloat = UIScreen.main.brightness
+    @State private var originalBrightness: CGFloat = 1.0
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    /// iOS 26 deprecates UIScreen.main. Resolve the active scene's screen instead.
+    private var activeScreen: UIScreen? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.screen
+    }
 
     private var formattedDate: String {
         let formatter = DateFormatter()
@@ -36,12 +43,14 @@ struct TravelCardFullScreenView: View {
         .contentShape(Rectangle())
         .onTapGesture { dismiss() }
         .onAppear {
-            originalBrightness = UIScreen.main.brightness
-            UIScreen.main.brightness = 1.0
+            if let screen = activeScreen {
+                originalBrightness = screen.brightness
+                screen.brightness = 1.0
+            }
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
-            UIScreen.main.brightness = originalBrightness
+            activeScreen?.brightness = originalBrightness
             UIApplication.shared.isIdleTimerDisabled = false
         }
     }

@@ -25,15 +25,7 @@ struct VerifyEmailView: View {
 
             VStack(spacing: 6) {
                 Text("Verify Email").font(.largeTitle.bold())
-                Text("We sent a verification link to ")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                +
-                Text(authService.email)
-                    .font(.subheadline.bold())
-                    .foregroundStyle(.primary)
-                +
-                Text(". Open the email and tap the link, then return here.")
+                Text("We sent a verification link to **\(authService.email)**. Open the email and tap the link, then return here.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

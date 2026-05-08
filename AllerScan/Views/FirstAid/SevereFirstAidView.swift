@@ -316,7 +316,7 @@ struct SevereFirstAidView: View {
             completedSteps.remove(action.stepNumber)
             stepTimestamps[action.stepNumber] = nil
             if action.stepNumber == 1 {
-                Task { await notificationService.cancelEmergencyReminders() }
+                notificationService.cancelEmergencyReminders()
             }
         } else {
             completedSteps.insert(action.stepNumber)
