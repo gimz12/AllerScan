@@ -594,10 +594,20 @@ struct AllergenDetectionService {
             "country", "email", "per serving", "daily value",
             "net weight", "best before", "expiry", "batch",
             "saturated fat", "total fat", "carbohydrate", "cholesterol",
-            "calories", "protein"
+            "calories", "protein",
+            // Serving suggestions and recipe directions — describe how to consume,
+            // not what's in the product.
+            "serve with", "best with", "pairs with", "recommended with",
+            "corresponds to", "preparation", "mix with", "add water", "add milk",
+            "enjoy with", "add hot water", "add boiling water"
         ]
 
         if blockedKeywords.contains(where: normalized.contains) { return false }
+
+        // Lines starting with footnote markers (* or **) are not ingredient lists.
+        let trimmed = normalized.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("*") { return false }
+
         if normalized.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil && !normalized.contains("ingredient") {
             return false
         }
@@ -805,50 +815,93 @@ final class HapticsService {
 }
 
 struct TranslationService {
+    private static let supportedLanguages: [NLLanguage] = [
+        .english, .french, .german, .italian, .spanish, .portuguese,
+        .vietnamese, .russian, .ukrainian, .japanese, .korean,
+        .simplifiedChinese, .traditionalChinese, .thai, .arabic
+    ]
+
     func detectLanguage(for text: String) -> (code: String, name: String)? {
-        let counts = scriptCounts(in: text)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
 
-        if counts.thai > 0 {
-            return ("th", "Thai")
+        let counts = scriptCounts(in: trimmed)
+
+        // Dominant script wins. Stray glyphs from OCR misreads can't hijack a different script.
+        let buckets: [(script: Script, count: Int)] = [
+            (.cjk, counts.han + counts.hiragana + counts.katakana + counts.hangul),
+            (.latin, counts.latin),
+            (.cyrillic, counts.cyrillic),
+            (.thai, counts.thai),
+            (.arabic, counts.arabic)
+        ]
+        guard let dominant = buckets.max(by: { $0.count < $1.count }), dominant.count > 0 else {
+            return nil
         }
 
-        let totalCJK = counts.han + counts.hiragana + counts.katakana + counts.hangul
+        switch dominant.script {
+        case .cjk:    return detectCJK(counts: counts, text: trimmed)
+        case .thai:   return makeResult(code: "th")
+        case .arabic: return makeResult(code: "ar")
+        case .latin, .cyrillic:
+            return detectLatinOrCyrillic(text: trimmed)
+        }
+    }
 
-        if totalCJK > 0 {
-            let hangulRatio = Double(counts.hangul) / Double(totalCJK)
-            let kanaRatio = Double(counts.hiragana + counts.katakana) / Double(totalCJK)
+    private enum Script { case cjk, latin, cyrillic, thai, arabic }
 
-            if hangulRatio >= 0.5 {
-                return ("ko", "Korean")
-            }
-            if counts.hiragana > 0 || kanaRatio >= 0.15 {
-                return ("ja", "Japanese")
-            }
-            if counts.han > 0 {
-                return ("zh-Hans", "Chinese")
-            }
-            if counts.hangul > 0 {
-                return ("ko", "Korean")
-            }
-            if counts.katakana > 0 {
-                return ("ja", "Japanese")
-            }
+    private func detectCJK(counts: ScriptCounts, text: String) -> (code: String, name: String) {
+        // Hiragana is exclusive to Japanese.
+        if counts.hiragana > 0 { return makeResult(code: "ja") }
+
+        let cjk = counts.han + counts.katakana + counts.hangul
+
+        // Hangul-dominant CJK text → Korean.
+        if cjk > 0, Double(counts.hangul) / Double(cjk) >= 0.5 {
+            return makeResult(code: "ko")
         }
 
+        // Han + meaningful katakana → Japanese; sparse katakana on Han is OCR noise.
+        if counts.han > 0, counts.katakana > 0 {
+            let kanaRatio = Double(counts.katakana) / Double(counts.han + counts.katakana)
+            return kanaRatio >= 0.15 ? makeResult(code: "ja") : classifyChinese(text: text)
+        }
+
+        if counts.han > 0      { return classifyChinese(text: text) }
+        if counts.katakana > 0 { return makeResult(code: "ja") }
+        return makeResult(code: "ko")
+    }
+
+    private func detectLatinOrCyrillic(text: String) -> (code: String, name: String)? {
         let recognizer = NLLanguageRecognizer()
+        recognizer.languageConstraints = Self.supportedLanguages
         recognizer.processString(text)
-        let hypotheses = recognizer.languageHypotheses(withMaximum: 3)
+        guard let language = recognizer.dominantLanguage else { return nil }
+        return makeResult(language: language)
+    }
 
-        let preferred = hypotheses
-            .sorted { $0.value > $1.value }
-            .map(\.key)
-            .first { $0 != .english } ?? recognizer.dominantLanguage
+    private func classifyChinese(text: String) -> (code: String, name: String) {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.languageConstraints = [.simplifiedChinese, .traditionalChinese]
+        recognizer.processString(text)
+        if recognizer.dominantLanguage == .traditionalChinese {
+            return ("zh-Hant", "Chinese (Traditional)")
+        }
+        return ("zh-Hans", "Chinese (Simplified)")
+    }
 
-        guard let language = preferred else { return nil }
-        let code = normalizedLanguageCode(for: language.rawValue)
+    private func makeResult(code: String) -> (code: String, name: String) {
         let displayCode = code.components(separatedBy: "-").first ?? code
         let name = Locale.current.localizedString(forLanguageCode: displayCode)?.capitalized ?? code.uppercased()
         return (code, name)
+    }
+
+    private func makeResult(language: NLLanguage) -> (code: String, name: String) {
+        switch language {
+        case .simplifiedChinese:  return ("zh-Hans", "Chinese (Simplified)")
+        case .traditionalChinese: return ("zh-Hant", "Chinese (Traditional)")
+        default:                  return makeResult(code: language.rawValue)
+        }
     }
 
     func findAllergenOccurrences(in text: String, trackedAllergens: [Allergen]) -> [TranslationAllergenChip] {
@@ -894,45 +947,53 @@ struct TranslationService {
         }
     }
 
-    private func normalizedLanguageCode(for code: String) -> String {
-        switch code {
-        case "ja": return "ja"
-        case "ko": return "ko"
-        case "zh", "zh-Hans", "zh-Hant": return "zh-Hans"
-        case "th": return "th"
-        default: return code
-        }
-    }
-
-    private func scriptCounts(in text: String) -> (han: Int, hiragana: Int, katakana: Int, hangul: Int, thai: Int) {
-        var han = 0
-        var hiragana = 0
-        var katakana = 0
-        var hangul = 0
-        var thai = 0
-
+    private func scriptCounts(in text: String) -> ScriptCounts {
+        var c = ScriptCounts()
         for scalar in text.unicodeScalars {
             let value = scalar.value
             if (0x3040...0x309F).contains(value) {
-                hiragana += 1
+                c.hiragana += 1
             } else if (0x30A0...0x30FF).contains(value) || (0x31F0...0x31FF).contains(value) {
-                katakana += 1
+                c.katakana += 1
             } else if (0xAC00...0xD7AF).contains(value)
                 || (0x1100...0x11FF).contains(value)
                 || (0x3130...0x318F).contains(value)
                 || (0xA960...0xA97F).contains(value)
                 || (0xD7B0...0xD7FF).contains(value) {
-                hangul += 1
+                c.hangul += 1
             } else if (0x0E00...0x0E7F).contains(value) {
-                thai += 1
+                c.thai += 1
             } else if (0x4E00...0x9FFF).contains(value)
                 || (0x3400...0x4DBF).contains(value)
                 || (0x20000...0x2A6DF).contains(value)
                 || (0xF900...0xFAFF).contains(value) {
-                han += 1
+                c.han += 1
+            } else if (0x0041...0x005A).contains(value)
+                || (0x0061...0x007A).contains(value)
+                || (0x00C0...0x024F).contains(value)
+                || (0x1E00...0x1EFF).contains(value) {
+                c.latin += 1
+            } else if (0x0400...0x04FF).contains(value)
+                || (0x0500...0x052F).contains(value) {
+                c.cyrillic += 1
+            } else if (0x0600...0x06FF).contains(value)
+                || (0x0750...0x077F).contains(value)
+                || (0xFB50...0xFDFF).contains(value)
+                || (0xFE70...0xFEFF).contains(value) {
+                c.arabic += 1
             }
         }
-
-        return (han, hiragana, katakana, hangul, thai)
+        return c
     }
+}
+
+private struct ScriptCounts {
+    var han = 0
+    var hiragana = 0
+    var katakana = 0
+    var hangul = 0
+    var thai = 0
+    var latin = 0
+    var cyrillic = 0
+    var arabic = 0
 }

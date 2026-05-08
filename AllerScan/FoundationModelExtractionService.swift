@@ -73,13 +73,17 @@ struct FoundationModelExtractionService {
     You extract ingredients from OCR text of product labels and determine if the product is food.
 
     Rules:
-    - Return ONLY actual chemical or food ingredients (substances the product is made of)
-    - IGNORE everything that is not an ingredient: safety warnings, hazard statements, usage instructions, marketing claims, directions for use, precautions, first aid instructions, recycling info, country of origin, manufacturer details, nutrition facts, percentages, weights, brand names, addresses, phone numbers, barcodes, storage instructions, batch numbers
+    - Return ONLY actual ingredients of the product itself — substances the product is *made of*, listed in the official ingredient declaration.
+    - CRITICAL: Do NOT extract foods that are mentioned only as serving suggestions, recipe directions, or preparation instructions. These describe how to *consume* the product, not what is in it. The product itself does not contain these foods.
+    - Examples of serving suggestions to IGNORE: "serve with milk", "best with yogurt", "add water", "1 serving corresponds to 30g cereals + 125 ml milk", "mix with hot water", "enjoy with coffee", "pairs well with", "recommended with", "preparation: add 200ml milk"
+    - Lines that start with * or ** are footnotes (serving suggestions, definitions, disclaimers) — IGNORE them entirely.
+    - IGNORE nutrition facts (protein, fat, carbohydrates, sugar, sodium, fiber, energy, kJ, kcal, calories, "of which", percentages, daily values, "per 100g", "per serving").
+    - IGNORE everything else that is not an ingredient: safety warnings, hazard statements, marketing claims, directions for use, precautions, first aid instructions, recycling info, country of origin, manufacturer details, brand names, addresses, phone numbers, barcodes, storage instructions, batch numbers, expiry dates, net weight.
     - Examples of things to IGNORE: "can kill", "flammable", "keep away from children", "do not ingest", "made in australia", "instantly", "misuse", "inhalant", "extremely"
-    - Group by label: "ingredients" for main ingredient lists, "contains" for allergen declarations, "mayContain" for cross-contamination warnings, "unknown" if unclear
-    - Split compound entries into individual phrases (e.g. "sugar, milk powder, cocoa" becomes three phrases)
-    - Fix obvious OCR errors in ingredient names when the correction is unambiguous
-    - If no ingredients are found, return empty segments
-    - Set isFood to true for food and beverages, false for cosmetics, cleaning products, medicine, pesticides, aerosols, or any product not meant to be eaten
+    - Group by label: "ingredients" for the main ingredient list, "contains" for explicit allergen declarations ("Contains: milk, soy"), "mayContain" for cross-contamination warnings ("may contain traces of nuts"), "unknown" if unclear.
+    - Split compound entries into individual phrases (e.g. "sugar, milk powder, cocoa" becomes three phrases).
+    - Fix obvious OCR errors in ingredient names when the correction is unambiguous.
+    - If the label has no ingredient list (only nutrition facts and serving info), return empty segments — do not invent ingredients from serving suggestions.
+    - Set isFood to true for food and beverages, false for cosmetics, cleaning products, medicine, pesticides, aerosols, or any product not meant to be eaten.
     """
 }

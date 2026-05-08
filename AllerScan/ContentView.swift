@@ -267,6 +267,7 @@ private struct DashboardScreen: View {
     @EnvironmentObject private var store: PersistenceStore
     @State private var showScanner = false
     @State private var showTranslation = false
+    @State private var showTravelCard = false
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
 
@@ -303,6 +304,9 @@ private struct DashboardScreen: View {
         }
         .fullScreenCover(isPresented: $showTranslation) {
             TranslationScreen()
+        }
+        .fullScreenCover(isPresented: $showTravelCard) {
+            TravelCardScreen()
         }
         .sheet(item: $appModel.selectedRecord) { record in
             ResultDetailView(record: record)
@@ -384,7 +388,10 @@ private struct DashboardScreen: View {
             toolkitRow(icon: "cross.case.fill", color: .red, title: "First Aid Guide", subtitle: "Emergency protocol for reactions")
 
             HStack(spacing: 10) {
-                toolkitCard(icon: "globe", color: .blue, title: "Travel Allergy Card", subtitle: "Digital cards for international travel")
+                Button { showTravelCard = true } label: {
+                    toolkitCard(icon: "globe", color: .blue, title: "Travel Allergy Card", subtitle: "Digital cards for international travel")
+                }
+                .buttonStyle(.plain)
                 Button { showTranslation = true } label: {
                     toolkitCard(icon: "character.book.closed.fill", color: .purple, title: "Translation Mode", subtitle: "Translate labels in 17 languages")
                 }
@@ -1595,6 +1602,725 @@ private struct TranslationResultView: View {
         }
 
         return result
+    }
+}
+
+// MARK: - Travel Card
+
+private enum TravelCardLanguage: String, CaseIterable, Identifiable {
+    case spanish = "es"
+    case french = "fr"
+    case german = "de"
+    case italian = "it"
+    case portuguese = "pt"
+    case vietnamese = "vi"
+    case russian = "ru"
+    case ukrainian = "uk"
+    case japanese = "ja"
+    case korean = "ko"
+    case chineseSimplified = "zh-Hans"
+    case chineseTraditional = "zh-Hant"
+    case thai = "th"
+    case arabic = "ar"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .spanish: "Spanish"
+        case .french: "French"
+        case .german: "German"
+        case .italian: "Italian"
+        case .portuguese: "Portuguese"
+        case .vietnamese: "Vietnamese"
+        case .russian: "Russian"
+        case .ukrainian: "Ukrainian"
+        case .japanese: "Japanese"
+        case .korean: "Korean"
+        case .chineseSimplified: "Chinese (Simplified)"
+        case .chineseTraditional: "Chinese (Traditional)"
+        case .thai: "Thai"
+        case .arabic: "Arabic"
+        }
+    }
+
+    var nativeName: String {
+        switch self {
+        case .spanish: "Español"
+        case .french: "Français"
+        case .german: "Deutsch"
+        case .italian: "Italiano"
+        case .portuguese: "Português"
+        case .vietnamese: "Tiếng Việt"
+        case .russian: "Русский"
+        case .ukrainian: "Українська"
+        case .japanese: "日本語"
+        case .korean: "한국어"
+        case .chineseSimplified: "简体中文"
+        case .chineseTraditional: "繁體中文"
+        case .thai: "ไทย"
+        case .arabic: "العربية"
+        }
+    }
+
+    var allergyPhrase: String {
+        switch self {
+        case .spanish: "Soy alérgico/a a:"
+        case .french: "Je suis allergique à :"
+        case .german: "Ich bin allergisch gegen:"
+        case .italian: "Sono allergico/a a:"
+        case .portuguese: "Sou alérgico/a a:"
+        case .vietnamese: "Tôi bị dị ứng với:"
+        case .russian: "У меня аллергия на:"
+        case .ukrainian: "У мене алергія на:"
+        case .japanese: "私は次のものにアレルギーがあります："
+        case .korean: "저는 다음에 알레르기가 있습니다:"
+        case .chineseSimplified: "我对以下食物过敏："
+        case .chineseTraditional: "我對以下食物過敏："
+        case .thai: "ฉันแพ้:"
+        case .arabic: "أنا أعاني من حساسية تجاه:"
+        }
+    }
+
+    var safetyPhrase: String {
+        switch self {
+        case .spanish: "Incluso pequeñas cantidades pueden causar una reacción grave. Por favor, evite cualquier traza o contaminación cruzada. Gracias."
+        case .french: "Même de petites quantités peuvent provoquer une réaction grave. Veuillez éviter toute trace ou contamination croisée. Merci."
+        case .german: "Schon kleine Mengen können eine schwere Reaktion auslösen. Bitte vermeiden Sie jegliche Spuren oder Kreuzkontamination. Danke."
+        case .italian: "Anche piccole quantità possono causare una reazione grave. Si prega di evitare qualsiasi traccia o contaminazione incrociata. Grazie."
+        case .portuguese: "Mesmo pequenas quantidades podem causar uma reação grave. Por favor, evite qualquer vestígio ou contaminação cruzada. Obrigado."
+        case .vietnamese: "Ngay cả một lượng nhỏ cũng có thể gây phản ứng nghiêm trọng. Vui lòng tránh bất kỳ dấu vết hoặc lây nhiễm chéo nào. Cảm ơn."
+        case .russian: "Даже малые количества могут вызвать серьёзную реакцию. Пожалуйста, избегайте любых следов или перекрёстного загрязнения. Спасибо."
+        case .ukrainian: "Навіть малі кількості можуть викликати серйозну реакцію. Будь ласка, уникайте будь-яких слідів чи перехресного забруднення. Дякую."
+        case .japanese: "少量でも重い反応を引き起こすことがあります。微量混入や交差汚染にもご注意ください。ありがとうございます。"
+        case .korean: "소량이라도 심각한 반응을 일으킬 수 있습니다. 어떠한 흔적이나 교차 오염도 피해 주십시오. 감사합니다."
+        case .chineseSimplified: "即使少量也可能引起严重反应。请避免任何残留或交叉污染。谢谢。"
+        case .chineseTraditional: "即使少量也可能引起嚴重反應。請避免任何殘留或交叉污染。謝謝。"
+        case .thai: "แม้ปริมาณเล็กน้อยก็อาจทำให้เกิดอาการรุนแรงได้ กรุณาหลีกเลี่ยงร่องรอยหรือการปนเปื้อนข้าม ขอบคุณค่ะ/ครับ"
+        case .arabic: "حتى الكميات الصغيرة قد تسبب تفاعلاً خطيراً. يرجى تجنب أي آثار أو تلوث متبادل. شكراً."
+        }
+    }
+
+    var isRTL: Bool { self == .arabic }
+}
+
+private enum AllergenTravelTranslations {
+    static func translate(_ allergen: Allergen, to language: TravelCardLanguage) -> String {
+        table[allergen.id]?[language] ?? allergen.name
+    }
+
+    private static let table: [String: [TravelCardLanguage: String]] = [
+        "milk": [
+            .spanish: "Lácteos", .french: "Produits laitiers", .german: "Milch",
+            .italian: "Latticini", .portuguese: "Lacticínios", .vietnamese: "Sữa",
+            .russian: "Молоко", .ukrainian: "Молоко", .japanese: "乳製品",
+            .korean: "유제품", .chineseSimplified: "乳制品", .chineseTraditional: "乳製品",
+            .thai: "นม", .arabic: "منتجات الألبان"
+        ],
+        "egg": [
+            .spanish: "Huevo", .french: "Œuf", .german: "Ei",
+            .italian: "Uovo", .portuguese: "Ovo", .vietnamese: "Trứng",
+            .russian: "Яйца", .ukrainian: "Яйця", .japanese: "卵",
+            .korean: "달걀", .chineseSimplified: "鸡蛋", .chineseTraditional: "雞蛋",
+            .thai: "ไข่", .arabic: "بيض"
+        ],
+        "peanut": [
+            .spanish: "Cacahuetes", .french: "Arachides", .german: "Erdnüsse",
+            .italian: "Arachidi", .portuguese: "Amendoins", .vietnamese: "Đậu phộng",
+            .russian: "Арахис", .ukrainian: "Арахіс", .japanese: "ピーナッツ",
+            .korean: "땅콩", .chineseSimplified: "花生", .chineseTraditional: "花生",
+            .thai: "ถั่วลิสง", .arabic: "فول سوداني"
+        ],
+        "tree_nut": [
+            .spanish: "Frutos secos", .french: "Fruits à coque", .german: "Nüsse",
+            .italian: "Frutta a guscio", .portuguese: "Frutos secos", .vietnamese: "Các loại hạt",
+            .russian: "Орехи", .ukrainian: "Горіхи", .japanese: "ナッツ類",
+            .korean: "견과류", .chineseSimplified: "坚果", .chineseTraditional: "堅果",
+            .thai: "ถั่วเปลือกแข็ง", .arabic: "المكسرات"
+        ],
+        "soy": [
+            .spanish: "Soja", .french: "Soja", .german: "Soja",
+            .italian: "Soia", .portuguese: "Soja", .vietnamese: "Đậu nành",
+            .russian: "Соя", .ukrainian: "Соя", .japanese: "大豆",
+            .korean: "콩", .chineseSimplified: "大豆", .chineseTraditional: "大豆",
+            .thai: "ถั่วเหลือง", .arabic: "فول الصويا"
+        ],
+        "wheat": [
+            .spanish: "Trigo / Gluten", .french: "Blé / Gluten", .german: "Weizen / Gluten",
+            .italian: "Grano / Glutine", .portuguese: "Trigo / Glúten", .vietnamese: "Lúa mì / Gluten",
+            .russian: "Пшеница / Глютен", .ukrainian: "Пшениця / Глютен", .japanese: "小麦 / グルテン",
+            .korean: "밀 / 글루텐", .chineseSimplified: "小麦 / 麸质", .chineseTraditional: "小麥 / 麩質",
+            .thai: "ข้าวสาลี / กลูเตน", .arabic: "القمح / الغلوتين"
+        ],
+        "fish": [
+            .spanish: "Pescado", .french: "Poisson", .german: "Fisch",
+            .italian: "Pesce", .portuguese: "Peixe", .vietnamese: "Cá",
+            .russian: "Рыба", .ukrainian: "Риба", .japanese: "魚",
+            .korean: "생선", .chineseSimplified: "鱼", .chineseTraditional: "魚",
+            .thai: "ปลา", .arabic: "السمك"
+        ],
+        "shellfish": [
+            .spanish: "Mariscos", .french: "Crustacés", .german: "Schalentiere",
+            .italian: "Crostacei", .portuguese: "Mariscos", .vietnamese: "Hải sản có vỏ",
+            .russian: "Ракообразные", .ukrainian: "Ракоподібні", .japanese: "甲殻類",
+            .korean: "갑각류", .chineseSimplified: "贝类", .chineseTraditional: "貝類",
+            .thai: "หอย / กุ้ง / ปู", .arabic: "المحار والقشريات"
+        ],
+        "sesame": [
+            .spanish: "Sésamo", .french: "Sésame", .german: "Sesam",
+            .italian: "Sesamo", .portuguese: "Gergelim", .vietnamese: "Vừng",
+            .russian: "Кунжут", .ukrainian: "Кунжут", .japanese: "ごま",
+            .korean: "참깨", .chineseSimplified: "芝麻", .chineseTraditional: "芝麻",
+            .thai: "งา", .arabic: "السمسم"
+        ],
+        "mustard": [
+            .spanish: "Mostaza", .french: "Moutarde", .german: "Senf",
+            .italian: "Senape", .portuguese: "Mostarda", .vietnamese: "Mù tạt",
+            .russian: "Горчица", .ukrainian: "Гірчиця", .japanese: "マスタード",
+            .korean: "겨자", .chineseSimplified: "芥末", .chineseTraditional: "芥末",
+            .thai: "มัสตาร์ด", .arabic: "الخردل"
+        ],
+        "celery": [
+            .spanish: "Apio", .french: "Céleri", .german: "Sellerie",
+            .italian: "Sedano", .portuguese: "Aipo", .vietnamese: "Cần tây",
+            .russian: "Сельдерей", .ukrainian: "Селера", .japanese: "セロリ",
+            .korean: "셀러리", .chineseSimplified: "芹菜", .chineseTraditional: "芹菜",
+            .thai: "ขึ้นฉ่าย", .arabic: "الكرفس"
+        ],
+        "lupin": [
+            .spanish: "Altramuz", .french: "Lupin", .german: "Lupinen",
+            .italian: "Lupini", .portuguese: "Tremoço", .vietnamese: "Đậu lupin",
+            .russian: "Люпин", .ukrainian: "Люпин", .japanese: "ルピナス",
+            .korean: "루핀", .chineseSimplified: "羽扇豆", .chineseTraditional: "羽扇豆",
+            .thai: "ลูพิน", .arabic: "الترمس"
+        ],
+        "mollusc": [
+            .spanish: "Moluscos", .french: "Mollusques", .german: "Weichtiere",
+            .italian: "Molluschi", .portuguese: "Moluscos", .vietnamese: "Động vật thân mềm",
+            .russian: "Моллюски", .ukrainian: "Молюски", .japanese: "軟体動物",
+            .korean: "연체동물", .chineseSimplified: "软体动物", .chineseTraditional: "軟體動物",
+            .thai: "หอย", .arabic: "الرخويات"
+        ],
+        "sulfite": [
+            .spanish: "Sulfitos", .french: "Sulfites", .german: "Sulfite",
+            .italian: "Solfiti", .portuguese: "Sulfitos", .vietnamese: "Sulfit",
+            .russian: "Сульфиты", .ukrainian: "Сульфіти", .japanese: "亜硫酸塩",
+            .korean: "아황산염", .chineseSimplified: "亚硫酸盐", .chineseTraditional: "亞硫酸鹽",
+            .thai: "ซัลไฟต์", .arabic: "الكبريتات"
+        ],
+        "corn": [
+            .spanish: "Maíz", .french: "Maïs", .german: "Mais",
+            .italian: "Mais", .portuguese: "Milho", .vietnamese: "Ngô",
+            .russian: "Кукуруза", .ukrainian: "Кукурудза", .japanese: "とうもろこし",
+            .korean: "옥수수", .chineseSimplified: "玉米", .chineseTraditional: "玉米",
+            .thai: "ข้าวโพด", .arabic: "الذرة"
+        ],
+        "coconut": [
+            .spanish: "Coco", .french: "Noix de coco", .german: "Kokosnuss",
+            .italian: "Cocco", .portuguese: "Coco", .vietnamese: "Dừa",
+            .russian: "Кокос", .ukrainian: "Кокос", .japanese: "ココナッツ",
+            .korean: "코코넛", .chineseSimplified: "椰子", .chineseTraditional: "椰子",
+            .thai: "มะพร้าว", .arabic: "جوز الهند"
+        ]
+    ]
+
+    static func icon(for allergenID: String) -> String {
+        switch allergenID {
+        case "milk": return "drop.fill"
+        case "egg": return "circle.fill"
+        case "fish", "shellfish", "mollusc": return "fish.fill"
+        case "sesame": return "circle.grid.2x2.fill"
+        case "mustard": return "drop.fill"
+        case "sulfite": return "drop.triangle.fill"
+        case "peanut", "tree_nut", "soy", "wheat", "lupin", "celery", "corn", "coconut": return "leaf.fill"
+        default: return "exclamationmark.triangle.fill"
+        }
+    }
+}
+
+private struct TravelCardScreen: View {
+    @EnvironmentObject private var appModel: AppViewModel
+    @EnvironmentObject private var store: PersistenceStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedLanguage: TravelCardLanguage = .spanish
+    @State private var showFullScreen = false
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
+                    headerSection
+                    cardSection
+                    actionButtonsSection
+                    travelTipSection
+                }
+                .padding()
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showFullScreen) {
+                TravelCardFullScreenView(
+                    language: selectedLanguage,
+                    allergens: appModel.trackedAllergens,
+                    profileName: store.activeProfile?.name ?? "Verified User"
+                )
+            }
+        }
+    }
+
+    private var headerSection: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Allergy")
+                    .font(.largeTitle.bold())
+                Text("Information")
+                    .font(.largeTitle.bold())
+            }
+            Spacer()
+            Text("DIGITAL\nCARD")
+                .font(.caption.bold())
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.blue.opacity(0.12))
+                .foregroundStyle(.blue)
+                .clipShape(Capsule())
+        }
+    }
+
+    private var cardSection: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(accentRed)
+                .frame(height: 6)
+
+            VStack(alignment: .leading, spacing: 20) {
+                englishSection
+                translationDivider
+                translatedSection
+                Divider()
+                verifiedUserRow
+            }
+            .padding(20)
+        }
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
+    }
+
+    private var englishSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("ENGLISH")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+
+            Text("I am allergic to:")
+                .font(.title2.bold())
+
+            VStack(spacing: 8) {
+                ForEach(appModel.trackedAllergens) { allergen in
+                    allergenChip(name: chipDisplayName(for: allergen), icon: AllergenTravelTranslations.icon(for: allergen.id))
+                }
+            }
+        }
+    }
+
+    private var translationDivider: some View {
+        HStack {
+            Rectangle().fill(Color(.separator)).frame(height: 0.5)
+            Image(systemName: "character.bubble")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 6)
+            Rectangle().fill(Color(.separator)).frame(height: 0.5)
+        }
+    }
+
+    private var translatedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            languagePicker
+
+            Text(selectedLanguage.allergyPhrase)
+                .font(.title2.bold())
+                .multilineTextAlignment(selectedLanguage.isRTL ? .trailing : .leading)
+                .frame(maxWidth: .infinity, alignment: selectedLanguage.isRTL ? .trailing : .leading)
+
+            VStack(alignment: selectedLanguage.isRTL ? .trailing : .leading, spacing: 10) {
+                ForEach(appModel.trackedAllergens) { allergen in
+                    translatedAllergenRow(allergen: allergen)
+                }
+            }
+        }
+    }
+
+    private var languagePicker: some View {
+        Menu {
+            ForEach(TravelCardLanguage.allCases) { language in
+                Button {
+                    selectedLanguage = language
+                } label: {
+                    HStack {
+                        Text("\(language.displayName) — \(language.nativeName)")
+                        if language == selectedLanguage {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(selectedLanguage.displayName.uppercased())
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color(.systemGray6))
+            .clipShape(Capsule())
+        }
+    }
+
+    private func allergenChip(name: String, icon: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.subheadline)
+                .foregroundStyle(accentRed)
+                .frame(width: 24, height: 24)
+                .background(accentRed.opacity(0.1))
+                .clipShape(Circle())
+
+            Text(name)
+                .font(.headline)
+
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func translatedAllergenRow(allergen: Allergen) -> some View {
+        let translated = AllergenTravelTranslations.translate(allergen, to: selectedLanguage)
+        return HStack(spacing: 10) {
+            Circle()
+                .fill(accentRed)
+                .frame(width: 6, height: 6)
+            Text(translated)
+                .font(.body.weight(.semibold))
+            Spacer()
+        }
+    }
+
+    private var verifiedUserRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: 36))
+                .foregroundStyle(.gray.opacity(0.5))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("VERIFIED USER")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.secondary)
+                Text(store.activeProfile?.name ?? "Verified User")
+                    .font(.subheadline.bold())
+            }
+
+            Spacer()
+
+            Image(systemName: "checkmark.seal.fill")
+                .font(.title3)
+                .foregroundStyle(.blue)
+        }
+    }
+
+    private var actionButtonsSection: some View {
+        VStack(spacing: 10) {
+            Button {
+                showFullScreen = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    Text("Show Full Screen")
+                        .font(.headline)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(accentRed)
+
+            ShareLink(item: shareText) {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.up")
+                    Text("Share Card")
+                        .font(.subheadline.bold())
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private var travelTipSection: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lightbulb.fill")
+                .foregroundStyle(.blue)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Travel Tip")
+                    .font(.subheadline.bold())
+                Text("Show this card to servers and kitchen staff when ordering food abroad. It's pre-translated for clarity.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .background(Color.blue.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func chipDisplayName(for allergen: Allergen) -> String {
+        switch allergen.id {
+        case "wheat": return "Gluten"
+        case "milk": return "Dairy"
+        case "tree_nut": return "Tree Nuts"
+        default: return allergen.name
+        }
+    }
+
+    private var shareText: String {
+        let allergens = appModel.trackedAllergens
+        guard !allergens.isEmpty else { return "Allergy Information" }
+        let englishLines = allergens.map { "• \(chipDisplayName(for: $0))" }.joined(separator: "\n")
+        let translatedLines = allergens
+            .map { "• \(AllergenTravelTranslations.translate($0, to: selectedLanguage))" }
+            .joined(separator: "\n")
+        return """
+        ALLERGY INFORMATION
+
+        I am allergic to:
+        \(englishLines)
+
+        \(selectedLanguage.allergyPhrase)
+        \(translatedLines)
+        """
+    }
+}
+
+private struct TravelCardFullScreenView: View {
+    let language: TravelCardLanguage
+    let allergens: [Allergen]
+    let profileName: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var originalBrightness: CGFloat = UIScreen.main.brightness
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .long
+        formatter.timeStyle = .none
+        return formatter.string(from: .now)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color(.systemBackground).ignoresSafeArea()
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    emergencyBanner
+                    content
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            closeButton
+        }
+        .statusBarHidden()
+        .contentShape(Rectangle())
+        .onTapGesture { dismiss() }
+        .onAppear {
+            originalBrightness = UIScreen.main.brightness
+            UIScreen.main.brightness = 1.0
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            UIScreen.main.brightness = originalBrightness
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+    }
+
+    private var emergencyBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title2)
+            Text("SEVERE FOOD ALLERGY")
+                .font(.title3.weight(.heavy))
+                .tracking(1)
+            Spacer()
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity)
+        .background(accentRed)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            englishSection
+            divider
+            translatedSection
+            divider
+            safetyNote
+            footer
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 28)
+    }
+
+    private var englishSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("ENGLISH")
+                .font(.subheadline.weight(.heavy))
+                .foregroundStyle(.secondary)
+                .tracking(1.5)
+
+            Text("I am allergic to:")
+                .font(.system(size: 32, weight: .bold))
+
+            VStack(spacing: 12) {
+                ForEach(allergens) { allergen in
+                    fullScreenAllergenRow(name: allergen.name, allergenID: allergen.id)
+                }
+            }
+        }
+    }
+
+    private var translatedSection: some View {
+        VStack(alignment: language.isRTL ? .trailing : .leading, spacing: 16) {
+            Text(language.displayName.uppercased())
+                .font(.subheadline.weight(.heavy))
+                .foregroundStyle(accentRed)
+                .tracking(1.5)
+
+            Text(language.allergyPhrase)
+                .font(.system(size: 32, weight: .bold))
+                .multilineTextAlignment(language.isRTL ? .trailing : .leading)
+
+            VStack(spacing: 12) {
+                ForEach(allergens) { allergen in
+                    fullScreenAllergenRow(
+                        name: AllergenTravelTranslations.translate(allergen, to: language),
+                        allergenID: allergen.id
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: language.isRTL ? .trailing : .leading)
+    }
+
+    private func fullScreenAllergenRow(name: String, allergenID: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: AllergenTravelTranslations.icon(for: allergenID))
+                .font(.title2)
+                .foregroundStyle(accentRed)
+                .frame(width: 36, height: 36)
+                .background(accentRed.opacity(0.12))
+                .clipShape(Circle())
+
+            Text(name)
+                .font(.system(size: 24, weight: .bold))
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var safetyNote: some View {
+        VStack(alignment: language.isRTL ? .trailing : .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .foregroundStyle(accentRed)
+                Text("Cross-contamination warning")
+                    .font(.subheadline.weight(.heavy))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.5)
+            }
+
+            Text(language.safetyPhrase)
+                .font(.body.weight(.semibold))
+                .multilineTextAlignment(language.isRTL ? .trailing : .leading)
+                .frame(maxWidth: .infinity, alignment: language.isRTL ? .trailing : .leading)
+        }
+        .padding(16)
+        .background(accentRed.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color(.separator))
+            .frame(height: 0.5)
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.title3)
+                .foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(profileName)
+                    .font(.headline)
+                Text(formattedDate)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text("AllerScan")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(1)
+        }
+        .padding(.top, 4)
+    }
+
+    private var closeButton: some View {
+        Button { dismiss() } label: {
+            Image(systemName: "xmark")
+                .font(.subheadline.bold())
+                .foregroundStyle(.white)
+                .padding(10)
+                .background(.black.opacity(0.5))
+                .clipShape(Circle())
+        }
+        .padding(.top, 12)
+        .padding(.trailing, 16)
     }
 }
 
