@@ -292,14 +292,21 @@ struct ScanService {
 }
 
 struct AllergenDetectionService {
-    private let foundationModelService = FoundationModelExtractionService()
+    /// When non-nil, the on-device LLM is consulted before falling back to the
+    /// regex-based extractor. Tests pass `nil` to make behaviour deterministic.
+    private let foundationModelService: FoundationModelExtractionService?
+
+    init(useFoundationModel: Bool = true) {
+        self.foundationModelService = useFoundationModel ? FoundationModelExtractionService() : nil
+    }
 
     func analyze(scan: RecognizedScan, trackedAllergens: [Allergen]) async -> ScanResult {
         let normalizedText = scan.normalizedText
         var isFood = true
 
         let segments: [IngredientSegment]
-        if let llmResult = await foundationModelService.extractSegments(from: scan) {
+        if let service = foundationModelService,
+           let llmResult = await service.extractSegments(from: scan) {
             segments = llmResult.segments
             isFood = llmResult.isFood
         } else {
