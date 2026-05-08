@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreHaptics
+import CoreLocation
 import Foundation
 import LocalAuthentication
 import NaturalLanguage
@@ -814,6 +815,101 @@ struct NotificationService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(
             withIdentifiers: [Self.secondDoseIdentifier, Self.biphasicWatchIdentifier]
         )
+    }
+}
+
+final class LocationService: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var locationContinuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+    private var authContinuation: CheckedContinuation<Void, Never>?
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func currentCoordinate() async -> CLLocationCoordinate2D? {
+        if manager.authorizationStatus == .notDetermined {
+            await waitForAuthorization()
+        }
+
+        let status = manager.authorizationStatus
+        guard status == .authorizedWhenInUse || status == .authorizedAlways else {
+            return nil
+        }
+
+        return await requestOneShotLocation()
+    }
+
+    private func waitForAuthorization() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async {
+                self.authContinuation = continuation
+                self.manager.requestWhenInUseAuthorization()
+            }
+        }
+    }
+
+    private func requestOneShotLocation() async -> CLLocationCoordinate2D? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>) in
+            DispatchQueue.main.async {
+                self.locationContinuation = continuation
+                self.manager.requestLocation()
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                    guard let self, let cont = self.locationContinuation else { return }
+                    self.locationContinuation = nil
+                    cont.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard manager.authorizationStatus != .notDetermined,
+              let cont = authContinuation else { return }
+        authContinuation = nil
+        cont.resume()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let cont = locationContinuation else { return }
+        locationContinuation = nil
+        cont.resume(returning: locations.last?.coordinate)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard let cont = locationContinuation else { return }
+        locationContinuation = nil
+        cont.resume(returning: nil)
+    }
+}
+
+enum EmergencyAlert {
+    static func smsURL(to phoneNumber: String, allergenName: String, coordinate: CLLocationCoordinate2D?) -> URL? {
+        let cleanedPhone = phoneNumber.filter { $0.isNumber || $0 == "+" }
+        let body = bodyText(allergenName: allergenName, coordinate: coordinate)
+        guard let encoded = body.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
+            return nil
+        }
+        return URL(string: "sms:\(cleanedPhone)?body=\(encoded)")
+    }
+
+    static func bodyText(allergenName: String, coordinate: CLLocationCoordinate2D?) -> String {
+        var lines: [String] = []
+        lines.append("EMERGENCY: I'm having a severe allergic reaction to \(allergenName.lowercased()).")
+        lines.append("Please come help or send help.")
+        if let coordinate {
+            let lat = String(format: "%.5f", coordinate.latitude)
+            let lon = String(format: "%.5f", coordinate.longitude)
+            lines.append("My coordinates: \(lat), \(lon)")
+            lines.append("Map: https://maps.apple.com/?ll=\(lat),\(lon)&q=Me")
+        } else {
+            lines.append("(Location unavailable — please call me back.)")
+        }
+        lines.append("Sent from AllerScan.")
+        return lines.joined(separator: "\n")
     }
 }
 

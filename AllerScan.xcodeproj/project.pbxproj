@@ -29,9 +29,22 @@
 		F6D000022F8B700000D70577 /* AllerScanUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AllerScanUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		F6660CD22FAE2D1A0052197E /* Exceptions for "AllerScan" folder in "AllerScan" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F6BD54102F8B683D00D70577 /* AllerScan */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F6BD54132F8B683D00D70577 /* AllerScan */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F6660CD22FAE2D1A0052197E /* Exceptions for "AllerScan" folder in "AllerScan" target */,
+			);
 			path = AllerScan;
 			sourceTree = "<group>";
 		};
@@ -398,8 +411,10 @@
 				DEVELOPMENT_TEAM = SMPKXAMPVC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AllerScan/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "AllerScan uses the camera to scan ingredient labels.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "AllerScan uses Face ID or Touch ID to protect your allergy profile.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "AllerScan needs your location only when you use the emergency alert button — your location is included in the SMS sent to your emergency contact so they can find you fast.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -432,8 +447,10 @@
 				DEVELOPMENT_TEAM = SMPKXAMPVC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AllerScan/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "AllerScan uses the camera to scan ingredient labels.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "AllerScan uses Face ID or Touch ID to protect your allergy profile.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "AllerScan needs your location only when you use the emergency alert button — your location is included in the SMS sent to your emergency contact so they can find you fast.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

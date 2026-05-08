@@ -19,6 +19,7 @@ struct AllerScanApp: App {
             ContentView()
                 .environmentObject(persistenceStore)
                 .environmentObject(appModel)
+                .environmentObject(EmergencyDeepLink.shared)
                 .task {
                     await appModel.bootstrap()
                 }

@@ -171,13 +171,27 @@ struct SecuritySettings: Codable, Equatable, Sendable {
     var notificationsEnabled: Bool
     var reminderHour: Int
     var reminderMinute: Int
+    var emergencyContact: EmergencyContact
 
     static let `default` = SecuritySettings(
         isBiometricLockEnabled: false,
         notificationsEnabled: false,
         reminderHour: 20,
-        reminderMinute: 0
+        reminderMinute: 0,
+        emergencyContact: .empty
     )
+}
+
+struct EmergencyContact: Codable, Equatable, Sendable {
+    var name: String
+    var phoneNumber: String
+
+    var isConfigured: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && !phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    static let empty = EmergencyContact(name: "", phoneNumber: "")
 }
 
 struct RecognizedScan: Sendable {

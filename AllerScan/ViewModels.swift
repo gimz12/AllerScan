@@ -65,14 +65,15 @@ final class AppViewModel: ObservableObject {
 
     func requestNotificationPermission() async {
         notificationPermissionGranted = await notificationService.requestAuthorization()
-        try? store.updateSecuritySettings(
-            SecuritySettings(
-                isBiometricLockEnabled: store.securitySettings.isBiometricLockEnabled,
-                notificationsEnabled: notificationPermissionGranted,
-                reminderHour: store.securitySettings.reminderHour,
-                reminderMinute: store.securitySettings.reminderMinute
-            )
-        )
+        var updated = store.securitySettings
+        updated.notificationsEnabled = notificationPermissionGranted
+        try? store.updateSecuritySettings(updated)
+    }
+
+    func updateEmergencyContact(_ contact: EmergencyContact) {
+        var updated = store.securitySettings
+        updated.emergencyContact = contact
+        try? store.updateSecuritySettings(updated)
     }
 
     func saveProfile() {

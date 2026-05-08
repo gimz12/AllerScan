@@ -143,6 +143,8 @@ final class PersistenceStore: ObservableObject {
         entity.notificationsEnabled = settings.notificationsEnabled
         entity.reminderHour = Int16(settings.reminderHour)
         entity.reminderMinute = Int16(settings.reminderMinute)
+        entity.emergencyContactName = settings.emergencyContact.name
+        entity.emergencyContactPhone = settings.emergencyContact.phoneNumber
         try context.save()
         refresh()
     }
@@ -215,7 +217,11 @@ final class PersistenceStore: ObservableObject {
             isBiometricLockEnabled: entity.isBiometricLockEnabled,
             notificationsEnabled: entity.notificationsEnabled,
             reminderHour: Int(entity.reminderHour),
-            reminderMinute: Int(entity.reminderMinute)
+            reminderMinute: Int(entity.reminderMinute),
+            emergencyContact: EmergencyContact(
+                name: entity.emergencyContactName ?? "",
+                phoneNumber: entity.emergencyContactPhone ?? ""
+            )
         )
     }
 
@@ -264,7 +270,9 @@ extension PersistenceStore {
             attribute("isBiometricLockEnabled", type: .booleanAttributeType),
             attribute("notificationsEnabled", type: .booleanAttributeType),
             attribute("reminderHour", type: .integer16AttributeType),
-            attribute("reminderMinute", type: .integer16AttributeType)
+            attribute("reminderMinute", type: .integer16AttributeType),
+            attribute("emergencyContactName", type: .stringAttributeType, optional: true),
+            attribute("emergencyContactPhone", type: .stringAttributeType, optional: true)
         ]
 
         let customAllergen = NSEntityDescription()
@@ -340,6 +348,8 @@ final class AppSettingsEntity: NSManagedObject {
     @NSManaged var notificationsEnabled: Bool
     @NSManaged var reminderHour: Int16
     @NSManaged var reminderMinute: Int16
+    @NSManaged var emergencyContactName: String?
+    @NSManaged var emergencyContactPhone: String?
 
     @nonobjc class func fetchRequest() -> NSFetchRequest<AppSettingsEntity> {
         NSFetchRequest<AppSettingsEntity>(entityName: "AppSettingsEntity")

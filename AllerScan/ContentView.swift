@@ -265,6 +265,7 @@ private struct MainTabView: View {
 private struct DashboardScreen: View {
     @EnvironmentObject private var appModel: AppViewModel
     @EnvironmentObject private var store: PersistenceStore
+    @EnvironmentObject private var emergencyDeepLink: EmergencyDeepLink
     @State private var showScanner = false
     @State private var showTranslation = false
     @State private var showTravelCard = false
@@ -311,6 +312,18 @@ private struct DashboardScreen: View {
         }
         .fullScreenCover(isPresented: $showFirstAid) {
             FirstAidListScreen()
+        }
+        .onChange(of: emergencyDeepLink.shouldOpenFirstAid) { _, shouldOpen in
+            if shouldOpen {
+                showFirstAid = true
+                emergencyDeepLink.shouldOpenFirstAid = false
+            }
+        }
+        .task {
+            if emergencyDeepLink.shouldOpenFirstAid {
+                showFirstAid = true
+                emergencyDeepLink.shouldOpenFirstAid = false
+            }
         }
         .sheet(item: $appModel.selectedRecord) { record in
             ResultDetailView(record: record)
@@ -2868,15 +2881,18 @@ private struct MildFirstAidView: View {
 
 private struct SevereFirstAidView: View {
     let allergen: Allergen
+    @EnvironmentObject private var store: PersistenceStore
     @State private var completedSteps: Set<Int> = []
     @State private var stepTimestamps: [Int: Date] = [:]
     @State private var showCallScript = false
+    @State private var alertContactInProgress = false
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
     private let notificationService = NotificationService()
+    private let locationService = LocationService()
 
     private var plan: FirstAidPlan { FirstAidGuide.plan(for: allergen) }
-
+    private var emergencyContact: EmergencyContact { store.securitySettings.emergencyContact }
     private var epinephrineTime: Date? { stepTimestamps[1] }
 
     var body: some View {
@@ -2956,7 +2972,7 @@ private struct SevereFirstAidView: View {
     }
 
     private var callEmergencyButton: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             Button { callEmergency() } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "phone.fill")
@@ -2970,6 +2986,26 @@ private struct SevereFirstAidView: View {
                 .clipShape(Capsule())
             }
 
+            if emergencyContact.isConfigured {
+                Button { alertEmergencyContact() } label: {
+                    HStack(spacing: 8) {
+                        if alertContactInProgress {
+                            ProgressView().tint(accentRed)
+                        } else {
+                            Image(systemName: "message.fill")
+                        }
+                        Text("Alert \(emergencyContact.name)")
+                            .font(.subheadline.bold())
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(accentRed)
+                    .background(accentRed.opacity(0.10))
+                    .clipShape(Capsule())
+                }
+                .disabled(alertContactInProgress)
+            }
+
             Button { showCallScript = true } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "text.bubble.fill")
@@ -2977,6 +3013,23 @@ private struct SevereFirstAidView: View {
                         .font(.subheadline.weight(.semibold))
                 }
                 .foregroundStyle(accentRed)
+            }
+        }
+    }
+
+    private func alertEmergencyContact() {
+        alertContactInProgress = true
+        Task {
+            let coordinate = await locationService.currentCoordinate()
+            await MainActor.run {
+                if let url = EmergencyAlert.smsURL(
+                    to: emergencyContact.phoneNumber,
+                    allergenName: allergen.name,
+                    coordinate: coordinate
+                ), UIApplication.shared.canOpenURL(url) {
+                    UIApplication.shared.open(url)
+                }
+                alertContactInProgress = false
             }
         }
     }
@@ -3349,6 +3402,10 @@ private struct SettingsScreen: View {
     @EnvironmentObject private var appModel: AppViewModel
     @EnvironmentObject private var store: PersistenceStore
 
+    @State private var contactName = ""
+    @State private var contactPhone = ""
+    @State private var showMedicalIDInstructions = false
+
     var body: some View {
         NavigationStack {
             Form {
@@ -3366,6 +3423,58 @@ private struct SettingsScreen: View {
                             appModel.isEditingProfile = true
                         }
                     }
+                }
+
+                Section {
+                    TextField("Name", text: $contactName)
+                        .textContentType(.name)
+                    TextField("Phone number", text: $contactPhone)
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                    Button("Save emergency contact") {
+                        appModel.updateEmergencyContact(
+                            EmergencyContact(
+                                name: contactName.trimmingCharacters(in: .whitespaces),
+                                phoneNumber: contactPhone.trimmingCharacters(in: .whitespaces)
+                            )
+                        )
+                    }
+                    .disabled(contactName.trimmingCharacters(in: .whitespaces).isEmpty
+                              || contactPhone.trimmingCharacters(in: .whitespaces).isEmpty)
+                } header: {
+                    Text("Emergency Contact")
+                } footer: {
+                    Text("During an allergic reaction, you can send an SMS with your location to this contact from the First Aid screen.")
+                        .font(.caption)
+                }
+
+                Section {
+                    Button {
+                        copyAllergensAndOpenHealth()
+                    } label: {
+                        Label("Add allergens to Medical ID", systemImage: "heart.text.square.fill")
+                    }
+                } header: {
+                    Text("Apple Health")
+                } footer: {
+                    Text("Your tracked allergens will be copied to the clipboard. The Health app will open — tap Medical ID → Edit → Allergies & Reactions, then paste.")
+                        .font(.caption)
+                }
+
+                Section {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "mic.fill")
+                            .foregroundStyle(.purple)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Use Siri in an Emergency")
+                                .font(.subheadline.bold())
+                            Text("Say \"Hey Siri, allergic reaction help in AllerScan\" to open the First Aid screen instantly.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Siri Shortcut")
                 }
 
                 Section("Security") {
@@ -3408,6 +3517,16 @@ private struct SettingsScreen: View {
                 }
             }
             .navigationTitle("Settings")
+            .onAppear {
+                contactName = store.securitySettings.emergencyContact.name
+                contactPhone = store.securitySettings.emergencyContact.phoneNumber
+            }
+            .alert("Allergens copied", isPresented: $showMedicalIDInstructions) {
+                Button("Open Health app") { openHealthApp() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your tracked allergens are on the clipboard. In Health: tap your photo → Medical ID → Edit → Allergies & Reactions, then paste.")
+            }
             .sheet(isPresented: $appModel.isEditingProfile) {
                 NavigationStack {
                     OnboardingView()
@@ -3420,6 +3539,19 @@ private struct SettingsScreen: View {
                         }
                 }
             }
+        }
+    }
+
+    private func copyAllergensAndOpenHealth() {
+        let names = appModel.trackedAllergens.map(\.name)
+        guard !names.isEmpty else { return }
+        UIPasteboard.general.string = names.joined(separator: ", ")
+        showMedicalIDInstructions = true
+    }
+
+    private func openHealthApp() {
+        if let url = URL(string: "x-apple-health://"), UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
         }
     }
 }
