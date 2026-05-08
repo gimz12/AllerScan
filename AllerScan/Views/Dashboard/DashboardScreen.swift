@@ -8,6 +8,7 @@ struct DashboardScreen: View {
     @State private var showTranslation = false
     @State private var showTravelCard = false
     @State private var showFirstAid = false
+    @State private var showProfiles = false
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
 
@@ -50,6 +51,16 @@ struct DashboardScreen: View {
         }
         .fullScreenCover(isPresented: $showFirstAid) {
             FirstAidListScreen()
+        }
+        .sheet(isPresented: $showProfiles) {
+            NavigationStack {
+                ProfilesScreen()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showProfiles = false }
+                        }
+                    }
+            }
         }
         .onChange(of: emergencyDeepLink.shouldOpenFirstAid) { _, shouldOpen in
             if shouldOpen {
@@ -358,58 +369,67 @@ struct DashboardScreen: View {
             Text("Risk Profile")
                 .font(.headline)
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: -8) {
-                    ForEach(appModel.trackedAllergens.prefix(5)) { allergen in
-                        Circle()
-                            .fill(allergenColor(for: allergen.id))
-                            .frame(width: 32, height: 32)
-                            .overlay {
-                                Text(String(allergen.name.prefix(1)))
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.white)
+            Button { showProfiles = true } label: {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        HStack(spacing: -8) {
+                            ForEach(appModel.trackedAllergens.prefix(5)) { allergen in
+                                Circle()
+                                    .fill(allergenColor(for: allergen.id))
+                                    .frame(width: 32, height: 32)
+                                    .overlay {
+                                        Text(String(allergen.name.prefix(1)))
+                                            .font(.caption.bold())
+                                            .foregroundStyle(.white)
+                                    }
                             }
+                            if appModel.trackedAllergens.count > 5 {
+                                Circle()
+                                    .fill(Color.gray)
+                                    .frame(width: 32, height: 32)
+                                    .overlay {
+                                        Text("+\(appModel.trackedAllergens.count - 5)")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(.white)
+                                    }
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.tertiary)
                     }
-                    if appModel.trackedAllergens.count > 5 {
-                        Circle()
-                            .fill(Color.gray)
-                            .frame(width: 32, height: 32)
-                            .overlay {
-                                Text("+\(appModel.trackedAllergens.count - 5)")
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.white)
-                            }
+
+                    Text("Monitoring \(appModel.trackedAllergens.count) allergen\(appModel.trackedAllergens.count == 1 ? "" : "s") — tap to manage profiles")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: "shield.checkered")
+                                .font(.caption2)
+                            Text("SAFETY COVERAGE")
+                                .font(.caption2.bold())
+                        }
+                        .foregroundStyle(accentRed)
+
+                        Spacer()
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "bolt.fill")
+                                .font(.caption2)
+                            Text("HIGH PRECISION")
+                                .font(.caption2.bold())
+                        }
+                        .foregroundStyle(.green)
                     }
                 }
-
-                Text("Monitoring \(appModel.trackedAllergens.count) allergen\(appModel.trackedAllergens.count == 1 ? "" : "s")")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                HStack {
-                    HStack(spacing: 4) {
-                        Image(systemName: "shield.checkered")
-                            .font(.caption2)
-                        Text("SAFETY COVERAGE")
-                            .font(.caption2.bold())
-                    }
-                    .foregroundStyle(accentRed)
-
-                    Spacer()
-
-                    HStack(spacing: 4) {
-                        Image(systemName: "bolt.fill")
-                            .font(.caption2)
-                        Text("HIGH PRECISION")
-                            .font(.caption2.bold())
-                    }
-                    .foregroundStyle(.green)
-                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .buttonStyle(.plain)
         }
     }
 
