@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import Translation
 
@@ -12,6 +13,7 @@ struct TranslationScreen: View {
     @State private var detectedLanguage: String?
     @State private var languageCode: String?
     @State private var isProcessing = false
+    @State private var selectedPhoto: PhotosPickerItem?
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
 
@@ -102,23 +104,45 @@ struct TranslationScreen: View {
                     .multilineTextAlignment(.center)
             }
 
-            Button {
-                Task {
-                    do {
-                        let image = try await cameraModel.capturePhoto()
-                        await processCapture(image)
-                    } catch {
-                        appModel.lastErrorMessage = error.localizedDescription
+            VStack(spacing: 10) {
+                Button {
+                    Task {
+                        do {
+                            let image = try await cameraModel.capturePhoto()
+                            await processCapture(image)
+                        } catch {
+                            appModel.lastErrorMessage = error.localizedDescription
+                        }
                     }
+                } label: {
+                    Label("Capture Label", systemImage: "camera.circle")
+                        .frame(maxWidth: .infinity)
                 }
-            } label: {
-                Label("Capture Label", systemImage: "camera.circle")
-                    .frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(accentRed)
+                .disabled(!appModel.cameraPermissionGranted || isProcessing || !cameraModel.isConfigured)
+
+                PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
+                    Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(isProcessing)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(accentRed)
-            .disabled(!appModel.cameraPermissionGranted || isProcessing || !cameraModel.isConfigured)
+            .onChange(of: selectedPhoto) { _, newItem in
+                guard let newItem else { return }
+                Task {
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        await processCapture(image)
+                    } else {
+                        appModel.lastErrorMessage = "Could not load that photo. Try a different image."
+                    }
+                    selectedPhoto = nil
+                }
+            }
 
             Spacer()
         }

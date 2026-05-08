@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 struct ScannerScreen: View {
@@ -5,6 +6,7 @@ struct ScannerScreen: View {
     @EnvironmentObject private var store: PersistenceStore
     @StateObject private var cameraModel = CameraCaptureModel()
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedPhoto: PhotosPickerItem?
 
     var body: some View {
         NavigationStack {
@@ -45,22 +47,44 @@ struct ScannerScreen: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Button {
-                    Task {
-                        do {
-                            let image = try await cameraModel.capturePhoto()
-                            await appModel.processCapturedImage(image)
-                        } catch {
-                            appModel.lastErrorMessage = error.localizedDescription
+                VStack(spacing: 10) {
+                    Button {
+                        Task {
+                            do {
+                                let image = try await cameraModel.capturePhoto()
+                                await appModel.processCapturedImage(image)
+                            } catch {
+                                appModel.lastErrorMessage = error.localizedDescription
+                            }
                         }
+                    } label: {
+                        Label("Scan Ingredient Label", systemImage: "viewfinder.circle")
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Label("Scan Ingredient Label", systemImage: "viewfinder.circle")
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!appModel.cameraPermissionGranted || appModel.isProcessingScan || !cameraModel.isConfigured)
+
+                    PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
+                        Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .disabled(appModel.isProcessingScan)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(!appModel.cameraPermissionGranted || appModel.isProcessingScan || !cameraModel.isConfigured)
+                .onChange(of: selectedPhoto) { _, newItem in
+                    guard let newItem else { return }
+                    Task {
+                        if let data = try? await newItem.loadTransferable(type: Data.self),
+                           let image = UIImage(data: data) {
+                            await appModel.processCapturedImage(image)
+                        } else {
+                            appModel.lastErrorMessage = "Could not load that photo. Try a different image."
+                        }
+                        selectedPhoto = nil
+                    }
+                }
 
                 List(appModel.trackedAllergens) { allergen in
                     Label(allergen.name, systemImage: "checkmark.shield")
