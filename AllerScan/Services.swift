@@ -174,7 +174,25 @@ struct ScanService {
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
             request.automaticallyDetectsLanguage = true
-            request.recognitionLanguages = ["ja-JP", "ko-KR", "zh-Hans", "zh-Hant", "th-TH", "en-US"]
+            request.recognitionLanguages = [
+                "en-US",
+                "fr-FR",
+                "de-DE",
+                "it-IT",
+                "es-ES",
+                "pt-BR",
+                "vi-VT",
+                "ru-RU",
+                "uk-UA",
+                "ja-JP",
+                "ko-KR",
+                "zh-Hans",
+                "zh-Hant",
+                "yue-Hans",
+                "yue-Hant",
+                "th-TH",
+                "ar-SA"
+            ]
 
             DispatchQueue.global(qos: .userInitiated).async {
                 do {

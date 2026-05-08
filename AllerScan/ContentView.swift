@@ -386,7 +386,7 @@ private struct DashboardScreen: View {
             HStack(spacing: 10) {
                 toolkitCard(icon: "globe", color: .blue, title: "Travel Allergy Card", subtitle: "Digital cards for international travel")
                 Button { showTranslation = true } label: {
-                    toolkitCard(icon: "character.book.closed.fill", color: .purple, title: "Translation Mode", subtitle: "Translate labels in 50+ languages")
+                    toolkitCard(icon: "character.book.closed.fill", color: .purple, title: "Translation Mode", subtitle: "Translate labels in 17 languages")
                 }
                 .buttonStyle(.plain)
             }
