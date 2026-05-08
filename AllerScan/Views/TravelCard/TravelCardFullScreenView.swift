@@ -5,11 +5,24 @@ struct TravelCardFullScreenView: View {
     let language: TravelCardLanguage
     let allergens: [Allergen]
     let profileName: String
+    /// Runtime ML translations for custom allergens, computed by TravelCardScreen
+    /// before this view is presented.
+    var runtimeTranslations: [String: String] = [:]
 
     @Environment(\.dismiss) private var dismiss
     @State private var originalBrightness: CGFloat = 1.0
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    private func displayName(for allergen: Allergen) -> String {
+        if let curated = AllergenTravelTranslations.curatedTranslation(allergen, to: language) {
+            return curated
+        }
+        if let runtime = runtimeTranslations[allergen.id] {
+            return runtime
+        }
+        return allergen.name
+    }
 
     /// iOS 26 deprecates UIScreen.main. Resolve the active scene's screen instead.
     private var activeScreen: UIScreen? {
@@ -116,7 +129,7 @@ struct TravelCardFullScreenView: View {
             VStack(spacing: 12) {
                 ForEach(allergens) { allergen in
                     fullScreenAllergenRow(
-                        name: AllergenTravelTranslations.translate(allergen, to: language),
+                        name: displayName(for: allergen),
                         allergenID: allergen.id
                     )
                 }

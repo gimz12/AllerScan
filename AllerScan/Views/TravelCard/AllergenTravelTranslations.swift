@@ -1,6 +1,13 @@
 import Foundation
 
 enum AllergenTravelTranslations {
+    /// Returns a hand-curated medical-grade translation for built-in allergens.
+    /// Returns nil for custom allergens (callers should fall back to runtime ML translation).
+    static func curatedTranslation(_ allergen: Allergen, to language: TravelCardLanguage) -> String? {
+        table[allergen.id]?[language]
+    }
+
+    /// Convenience wrapper: curated translation if available, otherwise English allergen name.
     static func translate(_ allergen: Allergen, to language: TravelCardLanguage) -> String {
         table[allergen.id]?[language] ?? allergen.name
     }

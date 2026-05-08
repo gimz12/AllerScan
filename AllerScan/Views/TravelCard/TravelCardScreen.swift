@@ -1,4 +1,5 @@
 import SwiftUI
+import Translation
 
 struct TravelCardScreen: View {
     @EnvironmentObject private var appModel: AppViewModel
@@ -8,7 +9,18 @@ struct TravelCardScreen: View {
     @State private var selectedLanguage: TravelCardLanguage = .spanish
     @State private var showFullScreen = false
 
+    /// Runtime ML translations for custom allergens (those without a curated entry).
+    /// Keyed by allergen ID. Cleared and re-translated whenever the language changes.
+    @State private var runtimeTranslations: [String: String] = [:]
+    @State private var translationConfig: TranslationSession.Configuration?
+
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    private var customAllergensNeedingTranslation: [Allergen] {
+        appModel.trackedAllergens.filter {
+            AllergenTravelTranslations.curatedTranslation($0, to: selectedLanguage) == nil
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -37,10 +49,42 @@ struct TravelCardScreen: View {
                 TravelCardFullScreenView(
                     language: selectedLanguage,
                     allergens: appModel.trackedAllergens,
-                    profileName: store.activeProfile?.name ?? "Verified User"
+                    profileName: store.activeProfile?.name ?? "Verified User",
+                    runtimeTranslations: runtimeTranslations
                 )
             }
+            .task(id: selectedLanguage) {
+                // Clear stale runtime translations and request new ones for the new language.
+                runtimeTranslations = [:]
+                translationConfig = .init(
+                    source: Locale.Language(identifier: "en"),
+                    target: Locale.Language(identifier: selectedLanguage.rawValue)
+                )
+            }
+            .translationTask(translationConfig) { session in
+                // Translate custom allergen names that don't have a curated entry.
+                let needsTranslation = customAllergensNeedingTranslation
+                for allergen in needsTranslation {
+                    if let response = try? await session.translate(allergen.name) {
+                        await MainActor.run {
+                            runtimeTranslations[allergen.id] = response.targetText
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    /// Resolves an allergen's display name in the selected language:
+    /// curated translation → runtime ML translation → English name.
+    private func translatedDisplayName(for allergen: Allergen) -> String {
+        if let curated = AllergenTravelTranslations.curatedTranslation(allergen, to: selectedLanguage) {
+            return curated
+        }
+        if let runtime = runtimeTranslations[allergen.id] {
+            return runtime
+        }
+        return allergen.name
     }
 
     private var headerSection: some View {
@@ -179,7 +223,7 @@ struct TravelCardScreen: View {
     }
 
     private func translatedAllergenRow(allergen: Allergen) -> some View {
-        let translated = AllergenTravelTranslations.translate(allergen, to: selectedLanguage)
+        let translated = translatedDisplayName(for: allergen)
         return HStack(spacing: 10) {
             Circle()
                 .fill(accentRed)
@@ -275,7 +319,7 @@ struct TravelCardScreen: View {
         guard !allergens.isEmpty else { return "Allergy Information" }
         let englishLines = allergens.map { "• \(chipDisplayName(for: $0))" }.joined(separator: "\n")
         let translatedLines = allergens
-            .map { "• \(AllergenTravelTranslations.translate($0, to: selectedLanguage))" }
+            .map { "• \(translatedDisplayName(for: $0))" }
             .joined(separator: "\n")
         return """
         ALLERGY INFORMATION
