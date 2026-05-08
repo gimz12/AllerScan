@@ -769,6 +769,52 @@ struct NotificationService {
 
         try? await center.add(request)
     }
+
+    static let secondDoseIdentifier = "first-aid-second-dose"
+    static let biphasicWatchIdentifier = "first-aid-biphasic-watch"
+
+    func scheduleSecondDoseReminder(after seconds: TimeInterval = 600, allergenName: String) async {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [Self.secondDoseIdentifier])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Second Epinephrine Dose"
+        content.body = "If symptoms have not improved after the first dose, administer a second EpiPen now and confirm 911 has been called."
+        content.sound = .defaultCritical
+        content.interruptionLevel = .timeSensitive
+        content.userInfo = ["allergenName": allergenName, "kind": "secondDose"]
+
+        let request = UNNotificationRequest(
+            identifier: Self.secondDoseIdentifier,
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+        )
+        try? await center.add(request)
+    }
+
+    func scheduleBiphasicWatchReminder(after seconds: TimeInterval = 6 * 3600, allergenName: String) async {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [Self.biphasicWatchIdentifier])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Biphasic Reaction Check-In"
+        content.body = "Anaphylaxis can return hours later. Stay near help and watch for any symptom return."
+        content.sound = .default
+        content.userInfo = ["allergenName": allergenName, "kind": "biphasic"]
+
+        let request = UNNotificationRequest(
+            identifier: Self.biphasicWatchIdentifier,
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+        )
+        try? await center.add(request)
+    }
+
+    func cancelEmergencyReminders() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [Self.secondDoseIdentifier, Self.biphasicWatchIdentifier]
+        )
+    }
 }
 
 @MainActor

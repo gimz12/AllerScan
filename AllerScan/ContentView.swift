@@ -268,6 +268,7 @@ private struct DashboardScreen: View {
     @State private var showScanner = false
     @State private var showTranslation = false
     @State private var showTravelCard = false
+    @State private var showFirstAid = false
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
 
@@ -307,6 +308,9 @@ private struct DashboardScreen: View {
         }
         .fullScreenCover(isPresented: $showTravelCard) {
             TravelCardScreen()
+        }
+        .fullScreenCover(isPresented: $showFirstAid) {
+            FirstAidListScreen()
         }
         .sheet(item: $appModel.selectedRecord) { record in
             ResultDetailView(record: record)
@@ -385,7 +389,10 @@ private struct DashboardScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            toolkitRow(icon: "cross.case.fill", color: .red, title: "First Aid Guide", subtitle: "Emergency protocol for reactions")
+            Button { showFirstAid = true } label: {
+                toolkitRow(icon: "cross.case.fill", color: .red, title: "First Aid Guide", subtitle: "Emergency protocol for reactions")
+            }
+            .buttonStyle(.plain)
 
             HStack(spacing: 10) {
                 Button { showTravelCard = true } label: {
@@ -783,10 +790,17 @@ private struct ScannerScreen: View {
 
 private struct ResultDetailView: View {
     let record: ScanRecord
+    @EnvironmentObject private var appModel: AppViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showIngredients = false
+    @State private var firstAidAllergen: Allergen?
 
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    private var firstAidTarget: Allergen? {
+        guard let firstMatch = record.matches.first else { return nil }
+        return appModel.availableAllergens.first { $0.id == firstMatch.allergenID }
+    }
 
     var body: some View {
         NavigationStack {
@@ -805,7 +819,9 @@ private struct ResultDetailView: View {
                     }
 
                     if record.riskLevel == .highRisk || record.riskLevel == .notFood {
-                        Button {} label: {
+                        Button {
+                            firstAidAllergen = firstAidTarget
+                        } label: {
                             Label("View First Aid", systemImage: "cross.circle.fill")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
@@ -813,6 +829,7 @@ private struct ResultDetailView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(accentRed)
+                        .disabled(firstAidTarget == nil)
                     }
 
                     actionButtons
@@ -822,6 +839,9 @@ private struct ResultDetailView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Scan Result")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $firstAidAllergen) { allergen in
+                FirstAidScreen(allergen: allergen)
+            }
         }
     }
 
@@ -2321,6 +2341,923 @@ private struct TravelCardFullScreenView: View {
         }
         .padding(.top, 12)
         .padding(.trailing, 16)
+    }
+}
+
+// MARK: - First Aid
+
+private struct FirstAidPlan {
+    let allergenID: String
+    let allergenName: String
+    let symptoms: [Symptom]
+    let actions: [Action]
+
+    struct Symptom: Identifiable, Hashable {
+        let title: String
+        let description: String
+        let icon: String
+        var id: String { title }
+    }
+
+    struct Action: Identifiable, Hashable {
+        let stepNumber: Int
+        let title: String
+        let description: String
+        var id: Int { stepNumber }
+    }
+}
+
+private enum FirstAidGuide {
+    static func plan(for allergen: Allergen) -> FirstAidPlan {
+        FirstAidPlan(
+            allergenID: allergen.id,
+            allergenName: allergen.name,
+            symptoms: universalSymptoms,
+            actions: actions(for: allergen)
+        )
+    }
+
+    static var emergencyNumber: String {
+        let region = Locale.current.region?.identifier ?? "US"
+        switch region {
+        case "US", "CA": return "911"
+        case "GB": return "999"
+        case "AU": return "000"
+        case "NZ": return "111"
+        case "JP": return "119"
+        default: return "112"
+        }
+    }
+
+    private static let universalSymptoms: [FirstAidPlan.Symptom] = [
+        .init(title: "Swelling",   description: "Face, lips, or tongue expanding",  icon: "wave.3.right"),
+        .init(title: "Hives",      description: "Red, itchy skin rashes or welts",  icon: "allergens"),
+        .init(title: "Difficulty", description: "Wheezing or trouble breathing",    icon: "lungs.fill"),
+        .init(title: "Dizziness",  description: "Fainting or rapid pulse drop",     icon: "heart.fill")
+    ]
+
+    private static func actions(for allergen: Allergen) -> [FirstAidPlan.Action] {
+        let allergenLowercased = allergen.name.lowercased()
+        return [
+            .init(
+                stepNumber: 1,
+                title: "Use Epinephrine",
+                description: "Inject your auto-injector (EpiPen) immediately into the outer thigh."
+            ),
+            .init(
+                stepNumber: 2,
+                title: "Call \(emergencyNumber) Immediately",
+                description: "Tell the operator: \"Anaphylaxis\" and mention the \(allergenLowercased) exposure."
+            ),
+            .init(
+                stepNumber: 3,
+                title: "Position Correctly",
+                description: "Lie down flat with legs raised. If vomiting, turn on your side."
+            ),
+            .init(
+                stepNumber: 4,
+                title: "Stay with Patient",
+                description: "Monitor breathing until paramedics arrive. Record the time of injection."
+            )
+        ]
+    }
+}
+
+private struct FirstAidListScreen: View {
+    @EnvironmentObject private var appModel: AppViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedAllergen: Allergen?
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    headerCallout
+
+                    if appModel.trackedAllergens.isEmpty {
+                        emptyState
+                    } else {
+                        VStack(spacing: 10) {
+                            ForEach(appModel.trackedAllergens) { allergen in
+                                Button {
+                                    selectedAllergen = allergen
+                                } label: {
+                                    allergenRow(allergen)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    disclaimer
+                }
+                .padding()
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("First Aid Guide")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .sheet(item: $selectedAllergen) { allergen in
+                FirstAidScreen(allergen: allergen)
+            }
+        }
+    }
+
+    private var headerCallout: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "cross.case.fill")
+                .font(.title2)
+                .foregroundStyle(accentRed)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Emergency Protocols")
+                    .font(.headline)
+                Text("Tap an allergen for the immediate response steps. The protocol applies the same to all food-allergic reactions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .background(accentRed.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func allergenRow(_ allergen: Allergen) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: AllergenTravelTranslations.icon(for: allergen.id))
+                .font(.title3)
+                .foregroundStyle(accentRed)
+                .frame(width: 38, height: 38)
+                .background(accentRed.opacity(0.12))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(allergen.name)
+                    .font(.headline)
+                Text("View emergency protocol")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "person.crop.circle.badge.questionmark")
+                .font(.title)
+                .foregroundStyle(.secondary)
+            Text("No tracked allergens")
+                .font(.headline)
+            Text("Add allergens to your profile to see emergency protocols.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var disclaimer: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(.blue)
+            Text("This guide is for general reference. In any emergency, call your local emergency number first and follow your physician's individual care plan.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private enum FirstAidSeverity {
+    case mild, severe
+}
+
+private struct FirstAidScreen: View {
+    let allergen: Allergen
+    @Environment(\.dismiss) private var dismiss
+    @State private var severity: FirstAidSeverity?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                switch severity {
+                case .none:
+                    FirstAidTriageView(allergen: allergen) { severity = $0 }
+                case .mild:
+                    MildFirstAidView(allergen: allergen) { severity = .severe }
+                case .severe:
+                    SevereFirstAidView(allergen: allergen)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if severity != nil {
+                        Button { severity = nil } label: {
+                            Image(systemName: "chevron.backward")
+                                .font(.subheadline.bold())
+                        }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: Triage
+
+private struct FirstAidTriageView: View {
+    let allergen: Allergen
+    let onResult: (FirstAidSeverity) -> Void
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                Text("Tap any symptom that's currently present:")
+                    .font(.headline)
+                severeOptions
+                mildOption
+                disclaimer
+            }
+            .padding()
+        }
+        .background(Color(.systemGroupedBackground))
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("EXPOSURE TO")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+                .tracking(0.5)
+            Text(allergen.name)
+                .font(.largeTitle.bold())
+            Text("Symptom Check")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var severeOptions: some View {
+        VStack(spacing: 10) {
+            severeButton(icon: "lungs.fill", title: "Difficulty breathing",
+                         description: "Wheezing, throat tightness, voice change")
+            severeButton(icon: "wave.3.right", title: "Face / lips / tongue swelling",
+                         description: "Visible swelling on the face")
+            severeButton(icon: "heart.fill", title: "Dizziness or confusion",
+                         description: "Light-headed, fainting, disoriented")
+            severeButton(icon: "syringe.fill", title: "Already used EpiPen",
+                         description: "Show severe protocol with timer")
+        }
+    }
+
+    private func severeButton(icon: String, title: String, description: String) -> some View {
+        Button { onResult(.severe) } label: {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.white.opacity(0.18))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                    Text(description)
+                        .font(.caption)
+                        .opacity(0.92)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.bold())
+            }
+            .foregroundStyle(.white)
+            .padding(14)
+            .background(accentRed)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var mildOption: some View {
+        Button { onResult(.mild) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "circle.dotted")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(Color(.systemGray5))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("None of these — mild rash or itch only")
+                        .font(.subheadline.bold())
+                    Text("Show monitoring protocol")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var disclaimer: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.shield.fill")
+                .foregroundStyle(accentRed)
+            Text("When in doubt, choose a severe symptom. Anaphylaxis can escalate within minutes — using epinephrine when not strictly needed is far safer than waiting too long.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .background(accentRed.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+// MARK: Mild path
+
+private struct MildFirstAidView: View {
+    let allergen: Allergen
+    let onEscalate: () -> Void
+
+    private let amber = Color(red: 0.92, green: 0.62, blue: 0.10)
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                heroCard
+                actionsSection
+                escalateButton
+                disclaimer
+            }
+            .padding()
+        }
+        .background(Color(.systemGroupedBackground))
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("MILD REACTION")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .tracking(0.5)
+                Text(allergen.name)
+                    .font(.largeTitle.bold())
+            }
+            Spacer()
+            HStack(spacing: 4) {
+                Image(systemName: "eye.fill")
+                    .font(.caption)
+                Text("MONITOR")
+                    .font(.caption.bold())
+                    .tracking(0.5)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(amber.opacity(0.15))
+            .foregroundStyle(amber)
+            .clipShape(Capsule())
+        }
+    }
+
+    private var heroCard: some View {
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [amber, amber.opacity(0.7)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: "eye.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.white.opacity(0.3))
+                    Spacer()
+                }
+                Spacer()
+                Text("Watch for Worsening")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+                Text("Most mild reactions resolve on their own — but they can progress. Stay near help.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.92))
+            }
+            .padding(20)
+        }
+        .frame(height: 160)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var actionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recommended Steps")
+                .font(.title2.bold())
+            VStack(spacing: 10) {
+                stepRow(step: 1, title: "Take an antihistamine",
+                        description: "Diphenhydramine (Benadryl) or cetirizine (Zyrtec) at the standard adult/child dose.")
+                stepRow(step: 2, title: "Stop exposure",
+                        description: "Stop eating, rinse the mouth if recently consumed, wash hands.")
+                stepRow(step: 3, title: "Monitor for 30 minutes",
+                        description: "Symptoms can escalate. Stay near someone who can help if it gets worse.")
+                stepRow(step: 4, title: "Contact your doctor",
+                        description: "Especially if hives spread, last more than 24 hours, or recur in waves.")
+            }
+        }
+    }
+
+    private func stepRow(step: Int, title: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text(String(format: "%02d", step))
+                .font(.title2.bold())
+                .foregroundStyle(amber.opacity(0.5))
+                .frame(width: 36, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var escalateButton: some View {
+        Button { onEscalate() } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text("Symptoms getting worse?")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .foregroundStyle(.white)
+            .background(Color.red)
+            .clipShape(Capsule())
+        }
+    }
+
+    private var disclaimer: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(.blue)
+            Text("Mild reactions can progress to anaphylaxis within minutes. If breathing changes, swelling appears, or dizziness develops, escalate immediately.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+// MARK: Severe path
+
+private struct SevereFirstAidView: View {
+    let allergen: Allergen
+    @State private var completedSteps: Set<Int> = []
+    @State private var stepTimestamps: [Int: Date] = [:]
+    @State private var showCallScript = false
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+    private let notificationService = NotificationService()
+
+    private var plan: FirstAidPlan { FirstAidGuide.plan(for: allergen) }
+
+    private var epinephrineTime: Date? { stepTimestamps[1] }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                headerSection
+                heroSection
+                callEmergencyButton
+                if let time = epinephrineTime {
+                    epinephrineTimerCard(injectedAt: time)
+                }
+                symptomsSection
+                actionsSection
+                disclaimer
+            }
+            .padding()
+        }
+        .background(Color(.systemGroupedBackground))
+        .sheet(isPresented: $showCallScript) {
+            EmergencyCallScriptView(
+                allergen: allergen,
+                injectionTime: epinephrineTime
+            )
+        }
+    }
+
+    private var headerSection: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("DETECTED ALLERGEN")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .tracking(0.5)
+                Text(allergen.name)
+                    .font(.largeTitle.bold())
+            }
+            Spacer()
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                Text("HIGH RISK")
+                    .font(.caption.bold())
+                    .tracking(0.5)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(accentRed.opacity(0.15))
+            .foregroundStyle(accentRed)
+            .clipShape(Capsule())
+        }
+    }
+
+    private var heroSection: some View {
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [Color(red: 0.25, green: 0.18, blue: 0.18), Color.black],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: AllergenTravelTranslations.icon(for: allergen.id))
+                        .font(.system(size: 56))
+                        .foregroundStyle(.white.opacity(0.25))
+                    Spacer()
+                }
+                Spacer()
+                Text("Immediate Clinical Protocol")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+            }
+            .padding(20)
+        }
+        .frame(height: 160)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var callEmergencyButton: some View {
+        VStack(spacing: 8) {
+            Button { callEmergency() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "phone.fill")
+                    Text("Call Emergency (\(FirstAidGuide.emergencyNumber))")
+                        .font(.headline)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .foregroundStyle(.white)
+                .background(accentRed)
+                .clipShape(Capsule())
+            }
+
+            Button { showCallScript = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "text.bubble.fill")
+                    Text("What to say to the operator")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(accentRed)
+            }
+        }
+    }
+
+    private func epinephrineTimerCard(injectedAt time: Date) -> some View {
+        TimelineView(.periodic(from: time, by: 1)) { context in
+            let elapsed = Int(context.date.timeIntervalSince(time))
+            let secondDoseDue = max(0, 600 - elapsed)
+            let mins = secondDoseDue / 60
+            let secs = secondDoseDue % 60
+            let canRedose = elapsed >= 300
+
+            return VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: "clock.fill")
+                    Text("EPINEPHRINE TIMER")
+                        .font(.caption.bold())
+                        .tracking(0.8)
+                    Spacer()
+                    Text(timeString(time))
+                        .font(.caption.bold())
+                }
+                .foregroundStyle(accentRed)
+
+                Text(canRedose
+                     ? (secondDoseDue == 0 ? "Second dose may be needed if no improvement" : String(format: "Re-dose window: %02d:%02d", mins, secs))
+                     : String(format: "Wait %02d:%02d before considering second dose", (300 - elapsed) / 60, (300 - elapsed) % 60))
+                    .font(.headline)
+
+                Text("Tell paramedics the injection time. If symptoms persist after 5 minutes, a second dose is appropriate.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(accentRed.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private var symptomsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Symptoms to Watch")
+                .font(.title2.bold())
+
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                spacing: 10
+            ) {
+                ForEach(plan.symptoms) { symptom in
+                    symptomCard(symptom)
+                }
+            }
+        }
+    }
+
+    private func symptomCard(_ symptom: FirstAidPlan.Symptom) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: symptom.icon)
+                .font(.title3)
+                .foregroundStyle(accentRed)
+                .frame(width: 36, height: 36)
+                .background(accentRed.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(symptom.title)
+                    .font(.headline)
+                Text(symptom.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var actionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Immediate Actions")
+                    .font(.title2.bold())
+                Spacer()
+                Text("Tap to mark done")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 10) {
+                ForEach(plan.actions) { action in
+                    actionRow(action)
+                }
+            }
+        }
+    }
+
+    private func actionRow(_ action: FirstAidPlan.Action) -> some View {
+        let isDone = completedSteps.contains(action.stepNumber)
+        let timestamp = stepTimestamps[action.stepNumber]
+
+        return Button { toggleStep(action) } label: {
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    Circle()
+                        .stroke(isDone ? accentRed : Color(.separator), lineWidth: 2)
+                        .frame(width: 32, height: 32)
+                    if isDone {
+                        Image(systemName: "checkmark")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(accentRed)
+                    } else {
+                        Text(String(format: "%02d", action.stepNumber))
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(action.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .strikethrough(isDone, color: .secondary)
+                    Text(action.description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let timestamp {
+                        Text("Done at \(timeString(timestamp))")
+                            .font(.caption.bold())
+                            .foregroundStyle(accentRed)
+                            .padding(.top, 2)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(14)
+            .background(isDone ? accentRed.opacity(0.06) : Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var disclaimer: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(.blue)
+            Text("This guide is for general reference. In any emergency, always call your local emergency services first and follow your physician's individual care plan.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func toggleStep(_ action: FirstAidPlan.Action) {
+        if completedSteps.contains(action.stepNumber) {
+            completedSteps.remove(action.stepNumber)
+            stepTimestamps[action.stepNumber] = nil
+            if action.stepNumber == 1 {
+                Task { await notificationService.cancelEmergencyReminders() }
+            }
+        } else {
+            completedSteps.insert(action.stepNumber)
+            stepTimestamps[action.stepNumber] = .now
+            if action.stepNumber == 1 {
+                Task {
+                    await notificationService.scheduleSecondDoseReminder(allergenName: allergen.name)
+                    await notificationService.scheduleBiphasicWatchReminder(allergenName: allergen.name)
+                }
+            }
+        }
+    }
+
+    private func callEmergency() {
+        guard let url = URL(string: "tel://\(FirstAidGuide.emergencyNumber)") else { return }
+        if UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func timeString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm:ss a"
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: 911 Script
+
+private struct EmergencyCallScriptView: View {
+    let allergen: Allergen
+    let injectionTime: Date?
+    @Environment(\.dismiss) private var dismiss
+
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("READ THIS TO THE OPERATOR")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                        .tracking(0.8)
+
+                    scriptCard
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundStyle(.blue)
+                        Text("Speak slowly. Repeat the address. Stay on the line until paramedics arrive.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(14)
+                    .background(Color.blue.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .padding()
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("911 Script")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var scriptCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            scriptLine(label: "1", text: "I am having anaphylaxis from \(allergen.name.lowercased()) exposure.")
+            Divider()
+            scriptLine(label: "2", text: "I need an ambulance now.")
+            Divider()
+            scriptLine(label: "3", text: addressLine)
+            Divider()
+            scriptLine(label: "4", text: epinephrineLine)
+            Divider()
+            scriptLine(label: "5", text: "Please stay on the line. I may have trouble breathing.")
+        }
+        .padding(20)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func scriptLine(label: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text(label)
+                .font(.title2.bold())
+                .foregroundStyle(accentRed)
+                .frame(width: 26, alignment: .leading)
+            Text(text)
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var addressLine: String {
+        "I am at [say your current address out loud]."
+    }
+
+    private var epinephrineLine: String {
+        if let time = injectionTime {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "h:mm a"
+            return "I used my EpiPen at \(formatter.string(from: time))."
+        }
+        return "I have not used an EpiPen yet."
     }
 }
 
