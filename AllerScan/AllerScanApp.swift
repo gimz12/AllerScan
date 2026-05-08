@@ -4,7 +4,6 @@ import UserNotifications
 
 @main
 struct AllerScanApp: App {
-    @Environment(\.scenePhase) private var scenePhase
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var persistenceStore: PersistenceStore
     @StateObject private var appModel: AppViewModel
@@ -27,18 +26,6 @@ struct AllerScanApp: App {
                 .environmentObject(EmergencyDeepLink.shared)
                 .task {
                     await appModel.bootstrap()
-                }
-                .onChange(of: scenePhase) { _, newPhase in
-                    switch newPhase {
-                    case .active:
-                        Task {
-                            await appModel.handleSceneDidBecomeActive()
-                        }
-                    case .background:
-                        appModel.handleEnteredBackground()
-                    default:
-                        break
-                    }
                 }
         }
     }

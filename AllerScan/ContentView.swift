@@ -21,8 +21,6 @@ struct ContentView: View {
                 VerifyEmailView()
             } else if !store.isLoaded {
                 SplashView()
-            } else if appModel.isLocked && store.activeProfile != nil {
-                LockedView()
             } else if store.activeProfile == nil {
                 OnboardingView()
             } else {
@@ -1097,24 +1095,28 @@ private struct AddCustomAllergenSheet: View {
 
 private struct MainTabView: View {
     @EnvironmentObject private var appModel: AppViewModel
+    @SceneStorage("AllerScan.selectedTab") private var selectedTab = 0
     private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             DashboardScreen()
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }
+                .tag(0)
 
             HistoryScreen()
                 .tabItem {
                     Label("History", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                 }
+                .tag(1)
 
-            SettingsScreen()
+            SettingsGate()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")
                 }
+                .tag(2)
         }
         .tint(accentRed)
         .sheet(isPresented: $appModel.isEditingProfile) {
@@ -4301,6 +4303,92 @@ private struct HistoryScreen: View {
     }
 }
 
+private struct SettingsGate: View {
+    @EnvironmentObject private var store: PersistenceStore
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var isUnlocked = false
+    @State private var isAuthenticating = false
+
+    private let biometricAuthService = BiometricAuthService()
+    private let accentRed = Color(red: 0.83, green: 0.18, blue: 0.18)
+
+    private var lockEnabled: Bool { store.securitySettings.isBiometricLockEnabled }
+
+    var body: some View {
+        Group {
+            if !lockEnabled || isUnlocked {
+                SettingsScreen()
+            } else {
+                lockedScreen
+            }
+        }
+        .onAppear {
+            if lockEnabled && !isUnlocked {
+                Task { await tryUnlock() }
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Re-lock when the app goes to the background, NOT on tab switch
+            // and NOT during the Face ID prompt itself (which can flip phase briefly).
+            if newPhase == .background && !isAuthenticating {
+                isUnlocked = false
+            }
+        }
+    }
+
+    private var lockedScreen: some View {
+        VStack(spacing: 22) {
+            Spacer()
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(accentRed)
+                .symbolRenderingMode(.hierarchical)
+
+            VStack(spacing: 6) {
+                Text("Settings Locked")
+                    .font(.title2.bold())
+                Text("Use Face ID or Touch ID to access settings, profile, and emergency contact info.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+
+            Button {
+                Task { await tryUnlock() }
+            } label: {
+                HStack(spacing: 8) {
+                    if isAuthenticating {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "faceid")
+                    }
+                    Text("Unlock")
+                        .font(.headline)
+                }
+                .padding(.horizontal, 36)
+                .padding(.vertical, 12)
+                .foregroundStyle(.white)
+                .background(accentRed)
+                .clipShape(Capsule())
+            }
+            .disabled(isAuthenticating)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
+    }
+
+    private func tryUnlock() async {
+        guard !isAuthenticating else { return }
+        isAuthenticating = true
+        defer { isAuthenticating = false }
+        let success = await biometricAuthService.authenticate(reason: "Unlock AllerScan settings")
+        isUnlocked = success
+    }
+}
+
 private struct SettingsScreen: View {
     @EnvironmentObject private var appModel: AppViewModel
     @EnvironmentObject private var store: PersistenceStore
@@ -4393,8 +4481,8 @@ private struct SettingsScreen: View {
                     Text("Siri Shortcut")
                 }
 
-                Section("Security") {
-                    Toggle("Biometric app lock", isOn: Binding(
+                Section {
+                    Toggle("Lock Settings", isOn: Binding(
                         get: { store.securitySettings.isBiometricLockEnabled },
                         set: { newValue in
                             Task {
@@ -4402,6 +4490,11 @@ private struct SettingsScreen: View {
                             }
                         }
                     ))
+                } header: {
+                    Text("Security")
+                } footer: {
+                    Text("Require Face ID or Touch ID to view or change profiles, allergens, emergency contact, and account info. Other parts of the app stay instantly accessible.")
+                        .font(.caption)
                 }
 
                 Section("Notifications") {
@@ -4564,30 +4657,6 @@ private struct ProfilesScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct LockedView: View {
-    @EnvironmentObject private var appModel: AppViewModel
-
-    var body: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "lock.shield")
-                .font(.system(size: 48))
-                .foregroundStyle(.orange)
-            Text("AllerScan Locked")
-                .font(.title2.bold())
-            Text("Use Face ID or Touch ID to unlock the app.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Unlock") {
-                Task {
-                    await appModel.unlockApp()
-                }
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding(28)
     }
 }
 

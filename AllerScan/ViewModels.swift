@@ -13,7 +13,6 @@ final class AppViewModel: ObservableObject {
     @Published var selectedAllergenIDs = Set(AllergenCatalog.defaults.prefix(4).map(\.id))
     @Published var notificationPermissionGranted = false
     @Published var cameraPermissionGranted = false
-    @Published var isLocked = false
 
     let store: PersistenceStore
 
@@ -22,8 +21,6 @@ final class AppViewModel: ObservableObject {
     private let biometricAuthService = BiometricAuthService()
     private let notificationService = NotificationService()
     private let hapticsService = HapticsService()
-    private var isAuthenticating = false
-    private var hasCompletedInitialUnlockCheck = false
 
     init(store: PersistenceStore) {
         self.store = store
@@ -51,10 +48,6 @@ final class AppViewModel: ObservableObject {
         if let profile = store.activeProfile {
             profileName = profile.name
             selectedAllergenIDs = Set(profile.trackedAllergenIDs)
-        }
-
-        if store.securitySettings.isBiometricLockEnabled && store.activeProfile != nil {
-            isLocked = true
         }
     }
 
@@ -198,43 +191,6 @@ final class AppViewModel: ObservableObject {
 
         settings.isBiometricLockEnabled = enabled
         try? store.updateSecuritySettings(settings)
-        if !enabled {
-            isLocked = false
-            hasCompletedInitialUnlockCheck = false
-        }
-    }
-
-    func handleSceneDidBecomeActive() async {
-        guard store.securitySettings.isBiometricLockEnabled, store.activeProfile != nil else { return }
-        guard isLocked || !hasCompletedInitialUnlockCheck else { return }
-        guard !isAuthenticating else { return }
-        guard biometricAuthService.canEvaluate() else {
-            lastErrorMessage = "Face ID or Touch ID is not available on this device."
-            return
-        }
-
-        isAuthenticating = true
-        defer {
-            isAuthenticating = false
-            hasCompletedInitialUnlockCheck = true
-        }
-
-        let success = await biometricAuthService.authenticate(reason: "Unlock AllerScan")
-        if success {
-            isLocked = false
-        } else {
-            isLocked = true
-        }
-    }
-
-    func handleEnteredBackground() {
-        guard store.securitySettings.isBiometricLockEnabled, store.activeProfile != nil else { return }
-        guard hasCompletedInitialUnlockCheck else { return }
-        isLocked = true
-    }
-
-    func unlockApp() async {
-        await handleSceneDidBecomeActive()
     }
 
     func updateNotifications(enabled: Bool, reminderDate: Date) async {
